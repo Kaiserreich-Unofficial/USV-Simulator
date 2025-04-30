@@ -1,0 +1,6 @@
+[submodule "src/vrx"]
+	path = src/vrx
+	url = https://github.com/Kaiserreich-Unofficial/vrx.git
+[submodule "src/MPPI-Generic"]
+	path = src/MPPI-Generic
+	url = https://github.com/ACDSLab/MPPI-Generic.git

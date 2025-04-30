@@ -30,3 +30,10 @@
 *.exe
 *.out
 *.app
+
+# Catkin_Make Files
+build/
+devel/
+
+# Catkin Workspace
+.catkin_workspace
