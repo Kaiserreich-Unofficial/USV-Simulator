@@ -18,6 +18,7 @@
 
 // MPPI 相关
 #include <mppi/controllers/MPPI/mppi_controller.cuh>
+#include <mppi/controllers/Tube-MPPI/tube_mppi_controller.cuh>
 #include <mppi/cost_functions/quadratic_cost/quadratic_cost.cuh>
 #include <mppi/sampling_distributions/colored_noise/colored_noise.cuh>
 #include <mppi/feedback_controllers/DDP/ddp.cuh>
@@ -35,7 +36,7 @@ using COST_T = QuadraticCost<DYN_T>;                                            
 using COST_PARAM_T = QuadraticCostTrajectoryParams<DYN_T>;                                      // 成本函数参数类型
 using FB_T = DDPFeedback<DYN_T, 100>;                                                           // 反馈控制器类型
 using SAMPLING_T = mppi::sampling_distributions::ColoredNoiseDistribution<DYN_T::DYN_PARAMS_T>; // 采样分布类型
-using CONTROLLER_T = VanillaMPPIController<DYN_T, COST_T, FB_T, 100, 4096, SAMPLING_T>;         // 控制器类型
+using CONTROLLER_T = TubeMPPIController<DYN_T, COST_T, FB_T, 100, 4096, SAMPLING_T>;            // 控制器类型
 using CONTROLLER_PARAMS_T = CONTROLLER_T::TEMPLATED_PARAMS;                                     // 控制器参数类型
 
 using PLANT_T = heron::USVMPCPlant<CONTROLLER_T>;            // MPC Plnat类型
@@ -54,7 +55,6 @@ bool sim_enable;                                   // 仿真开关
 float sim_total_time;                              // 总仿真时间
 int sim_times;                                     // 总仿真次数
 
-state_array target_state = state_array::Zero();   // 目标状态
 state_array observed_state = state_array::Zero(); // 观测状态
 
 // 控制序列、互斥锁
@@ -62,26 +62,34 @@ deque<control_array> control_queue;
 mutex control_mutex;
 condition_variable queue_cv; // 条件变量
 
+// 参考状态队列
+deque<state_array> reference_queue;
+mutex reference_mutex;
+
 // 观测状态回调函数
 void observer_cb(const nav_msgs::Odometry &state)
 {
-    target_state[0] = state.pose.pose.position.x;
-    target_state[1] = state.pose.pose.position.y;
-    target_state[2] = tf::getYaw(state.pose.pose.orientation);
-    target_state[3] = state.twist.twist.linear.x;
-    target_state[4] = state.twist.twist.linear.y;
-    target_state[5] = state.twist.twist.angular.z;
+    observed_state[0] = state.pose.pose.position.x;
+    observed_state[1] = state.pose.pose.position.y;
+    observed_state[2] = tf::getYaw(state.pose.pose.orientation);
+    observed_state[3] = state.twist.twist.linear.x;
+    observed_state[4] = state.twist.twist.linear.y;
+    observed_state[5] = state.twist.twist.angular.z;
+    // ROS_INFO("新的观测状态: %f, %f, %f, %f, %f, %f", observed_state[0], observed_state[1], observed_state[2], observed_state[3], observed_state[4], observed_state[5]);
 }
 
 // 目标状态回调函数
 void target_cb(const nav_msgs::Odometry &state)
 {
+    state_array target_state; // 目标状态
     target_state[0] = state.pose.pose.position.x;
     target_state[1] = state.pose.pose.position.y;
     target_state[2] = tf::getYaw(state.pose.pose.orientation);
     target_state[3] = state.twist.twist.linear.x;
     target_state[4] = state.twist.twist.linear.y;
     target_state[5] = state.twist.twist.angular.z;
+    unique_lock<mutex> lock(reference_mutex);
+    reference_queue.push_back(target_state);
     ROS_INFO("新的目标状态: %f, %f, %f, %f, %f, %f", target_state[0], target_state[1], target_state[2], target_state[3], target_state[4], target_state[5]);
 }
 
@@ -120,27 +128,39 @@ void solverThread(PLANT_T &plant, COST_PARAM_T &cost_params)
     ROS_WARN("求解线程已启动!");
     while (ros::ok())
     {
-        unique_lock<mutex> lock(control_mutex);
-        queue_cv.wait(lock, []
+        unique_lock<mutex> lock_c(control_mutex);
+        queue_cv.wait(lock_c, []
                       { return control_queue.size() < static_cast<size_t>(horizon); });
-        lock.unlock();
+        lock_c.unlock();
 
         // 求解
-        memcpy(cost_params.s_goal, target_state.data(), DYN_T::STATE_DIM * sizeof(float));
-        plant.setCostParams(cost_params);
-        plant.updateState(plant.current_state_, (step + 1) * dt);
-        plant.runControlIteration(&alive);
+        unique_lock<mutex> lock_r(reference_mutex);
+        control_trajectory new_control_traj; // 新的控制轨迹
+        if (!reference_queue.empty())
+        {
+            memcpy(cost_params.s_goal, reference_queue.front().data(), DYN_T::STATE_DIM * sizeof(float));
+            reference_queue.pop_front();
 
-        ROS_INFO("Step: %d", step);
-        ROS_INFO("Avg Optimization time: %f ms", plant.getAvgOptimizationTime());
-        ROS_INFO("Last Optimization time: %f ms", plant.getLastOptimizationTime());
-        ROS_INFO("Avg Loop time: %f ms", plant.getAvgLoopTime());
-        ROS_INFO("Avg Optimization Hz: %f Hz", 1.0 / (plant.getAvgOptimizationTime() * 1e-3));
+            plant.setCostParams(cost_params);
+            plant.updateState(observed_state, (step + 1) * dt);
+            plant.runControlIteration(&alive);
 
-        auto new_control_traj = plant.getControlTraj();
-        const size_t control_seq_size = new_control_traj.cols();
+            ROS_INFO("Step: %d", step);
+            ROS_INFO("Avg Optimization time: %f ms", plant.getAvgOptimizationTime());
+            ROS_INFO("Last Optimization time: %f ms", plant.getLastOptimizationTime());
+            ROS_INFO("Avg Loop time: %f ms", plant.getAvgLoopTime());
+            ROS_INFO("Avg Optimization Hz: %f Hz", 1.0 / (plant.getAvgOptimizationTime() * 1e-3));
+
+            new_control_traj = plant.getControlTraj();
+        }
+        else {
+            ROS_WARN("参考轨迹队列为空，返回空控制序列!");
+            new_control_traj.setZero();
+        }
+        lock_r.unlock();
+
         lock_guard<mutex> guard(control_mutex); // 控制队列加锁
-        for (size_t i = 0; i < control_seq_size; ++i)
+        for (size_t i = 0; i < new_control_traj.cols(); ++i)
         {
             control_queue.push_back(new_control_traj.col(i));
         }
@@ -221,20 +241,6 @@ int main(int argc, char *argv[])
     // 启动异步 Spinner 处理回调
     ros::AsyncSpinner spinner(2);
     spinner.start();
-
-    // 预先填充一次队列
-    {
-        // 求解
-        memcpy(cost_params.s_goal, target_state.data(), DYN_T::STATE_DIM * sizeof(float));
-        plant.setCostParams(cost_params);
-        plant.updateState(plant.current_state_, (step + 1) * dt);
-        plant.runControlIteration(&alive);
-
-        auto new_control_traj = plant.getControlTraj();
-        const size_t control_seq_size = new_control_traj.cols();
-        for (size_t i = 0; i < control_seq_size; ++i)
-            control_queue.push_back(new_control_traj.col(i));
-    }
 
     // 启动线程
     thread pub_thread(publisherThread, ref(pub_left), ref(pub_right));
