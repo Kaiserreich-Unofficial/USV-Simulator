@@ -6,6 +6,7 @@ Panels:
       Expanded:
         - /Global Options1
         - /Odometry1
+        - /Odometry1/Shape1
         - /Axes1
       Splitter Ratio: 0.5
     Tree Height: 555
@@ -81,7 +82,7 @@ Visualization Manager:
         Color: 255; 25; 0
         Head Length: 0.30000001192092896
         Head Radius: 0.10000000149011612
-        Shaft Length: 1
+        Shaft Length: 0.10000000149011612
         Shaft Radius: 0.05000000074505806
         Value: Arrow
       Topic: /wamv/p3d_position

@@ -17,14 +17,14 @@ def generate_eight_traj(total_steps, dt):
     for i in range(total_steps):
         t = i * dt
         # 位置
-        x = 34 * np.sin(alpha1 * t)
-        y = 48 * np.cos(alpha2 * t) - 48
+        x = 3.4 * np.sin(alpha1 * t)
+        y = 4.8 * np.cos(alpha2 * t) - 6
 
         # 速度及加速度
-        x_dot = 34 * alpha1 * np.cos(alpha1 * t)
-        y_dot = 48 * (-alpha2) * np.sin(alpha2 * t)
-        x_dd  = -34 * alpha1**2 * np.sin(alpha1 * t)
-        y_dd  = 48 * (-alpha2**2) * np.cos(alpha2 * t)
+        x_dot = 3.4 * alpha1 * np.cos(alpha1 * t)
+        y_dot = 4.8 * (-alpha2) * np.sin(alpha2 * t)
+        x_dd  = -3.4 * alpha1**2 * np.sin(alpha1 * t)
+        y_dd  = 4.8 * (-alpha2**2) * np.cos(alpha2 * t)
 
         # 航向角及角速度
         psi     = np.arctan2(y_dot, x_dot)
@@ -53,7 +53,7 @@ def publish_trajectory():
     pub = rospy.Publisher('/wamv/target_position', Odometry, queue_size=10)
     rate = rospy.Rate(10)  # 10Hz
 
-    total_steps = 500
+    total_steps = 50000
     dt          = 0.1
 
     traj = generate_eight_traj(total_steps, dt)
@@ -83,6 +83,7 @@ def publish_trajectory():
         odom.twist.twist.linear.y  = v
         odom.twist.twist.linear.z  = 0.0
         odom.twist.twist.angular.z = r
+        rospy.loginfo("x: %.2f, y: %.2f, psi: %.2f, u: %.2f, v: %.2f, r: %.2f", x, y, psi, u, v, r)
 
         # 发布
         pub.publish(odom)

@@ -11,10 +11,7 @@
 // 容器操作
 #include <string>
 #include <vector>
-// 线程相关
-#include <thread>
 #include <deque>
-#include <condition_variable>
 
 // MPPI 相关
 #include <mppi/controllers/MPPI/mppi_controller.cuh>
@@ -55,16 +52,9 @@ bool sim_enable;                                   // 仿真开关
 float sim_total_time;                              // 总仿真时间
 int sim_times;                                     // 总仿真次数
 
-state_array observed_state = state_array::Zero(); // 观测状态
-
-// 控制序列、互斥锁
-deque<control_array> control_queue;
-mutex control_mutex;
-condition_variable queue_cv; // 条件变量
-
-// 参考状态队列
-deque<state_array> reference_queue;
-mutex reference_mutex;
+state_array observed_state; // 观测状态
+state_array target_state; // 目标状态
+bool target_state_enable = false; // 目标状态开关
 
 // 观测状态回调函数
 void observer_cb(const nav_msgs::Odometry &state)
@@ -81,91 +71,13 @@ void observer_cb(const nav_msgs::Odometry &state)
 // 目标状态回调函数
 void target_cb(const nav_msgs::Odometry &state)
 {
-    state_array target_state; // 目标状态
+    if (!target_state_enable) target_state_enable = true;
     target_state[0] = state.pose.pose.position.x;
     target_state[1] = state.pose.pose.position.y;
     target_state[2] = tf::getYaw(state.pose.pose.orientation);
     target_state[3] = state.twist.twist.linear.x;
     target_state[4] = state.twist.twist.linear.y;
     target_state[5] = state.twist.twist.angular.z;
-    unique_lock<mutex> lock(reference_mutex);
-    reference_queue.push_back(target_state);
-    ROS_INFO("新的目标状态: %f, %f, %f, %f, %f, %f", target_state[0], target_state[1], target_state[2], target_state[3], target_state[4], target_state[5]);
-}
-
-// 控制指令发布线程函数
-void publisherThread(ros::Publisher &pub_left, ros::Publisher &pub_right)
-{
-    ROS_WARN("发布线程已启动!");
-    ros::Rate rate(1.0 / dt);
-    control_array cmd; // 控制指令消息
-    while (ros::ok())
-    {
-        unique_lock<mutex> lock(control_mutex);
-        if (!control_queue.empty())
-        {
-            cmd = control_queue.front();
-            control_queue.pop_front();
-            if (control_queue.size() < static_cast<size_t>(horizon))
-            {
-                queue_cv.notify_one();
-            }
-        }
-        std_msgs::Float32 left_msg, right_msg;
-        left_msg.data = cmd[0];
-        right_msg.data = cmd[1];
-        pub_left.publish(left_msg);
-        pub_right.publish(right_msg);
-        rate.sleep();
-    }
-}
-
-atomic<bool> alive(true); // 控制器是否在运行
-int step = 0;             // 当前步数
-// 求解线程函数
-void solverThread(PLANT_T &plant, COST_PARAM_T &cost_params)
-{
-    ROS_WARN("求解线程已启动!");
-    while (ros::ok())
-    {
-        unique_lock<mutex> lock_c(control_mutex);
-        queue_cv.wait(lock_c, []
-                      { return control_queue.size() < static_cast<size_t>(horizon); });
-        lock_c.unlock();
-
-        // 求解
-        unique_lock<mutex> lock_r(reference_mutex);
-        control_trajectory new_control_traj; // 新的控制轨迹
-        if (!reference_queue.empty())
-        {
-            memcpy(cost_params.s_goal, reference_queue.front().data(), DYN_T::STATE_DIM * sizeof(float));
-            reference_queue.pop_front();
-
-            plant.setCostParams(cost_params);
-            plant.updateState(observed_state, (step + 1) * dt);
-            plant.runControlIteration(&alive);
-
-            ROS_INFO("Step: %d", step);
-            ROS_INFO("Avg Optimization time: %f ms", plant.getAvgOptimizationTime());
-            ROS_INFO("Last Optimization time: %f ms", plant.getLastOptimizationTime());
-            ROS_INFO("Avg Loop time: %f ms", plant.getAvgLoopTime());
-            ROS_INFO("Avg Optimization Hz: %f Hz", 1.0 / (plant.getAvgOptimizationTime() * 1e-3));
-
-            new_control_traj = plant.getControlTraj();
-        }
-        else {
-            ROS_WARN("参考轨迹队列为空，返回空控制序列!");
-            new_control_traj.setZero();
-        }
-        lock_r.unlock();
-
-        lock_guard<mutex> guard(control_mutex); // 控制队列加锁
-        for (size_t i = 0; i < new_control_traj.cols(); ++i)
-        {
-            control_queue.push_back(new_control_traj.col(i));
-        }
-        step++; // 更新步数
-    }
 }
 
 int main(int argc, char *argv[])
@@ -183,12 +95,7 @@ int main(int argc, char *argv[])
     nh.param<float>("lambda", _lambda, 1.0);
     nh.param<float>("alpha", _alpha, 0.0);
     nh.param<int>("max_iter", max_iter, 1);
-    if (nh.getParam("sim_env/enable", sim_enable))
-    {
-        ROS_WARN("仿真环境已开启!");
-        nh.param<float>("sim_env/total_time", sim_total_time, 100.0);
-        nh.param<int>("sim_env/times", sim_times, 1);
-    }
+
     // 设置动力学和代价函数
     DYN_T dynamics;                      // 初始化动力学
     COST_T cost;                         // 初始化成本函数
@@ -230,28 +137,52 @@ int main(int argc, char *argv[])
     ROS_INFO("预测域: %d, 步长: %.2f, 控制标准差: %.2f", horizon, dt, MAX_CTRL);
 
     // 订阅 USV 观测状态
-    ros::Subscriber sub_observer = nh.subscribe("/wamv/p3d_position", 10, observer_cb); // 观测状态变量
+    ros::Subscriber sub_observer = nh.subscribe("/wamv/p3d_position", 1, observer_cb); // 观测状态变量
     // 订阅 USV 目标轨迹
-    ros::Subscriber sub_target = nh.subscribe("/wamv/target_position", 10, target_cb); // 观测状态变量
+    ros::Subscriber sub_target = nh.subscribe("/wamv/target_position", 1, target_cb); // 观测状态变量
     // 发布消息到左螺旋桨转速控制话题
-    ros::Publisher pub_left = nh.advertise<std_msgs::Float32>("/wamv/thrusters/left_thrust_cmd", 10);
+    ros::Publisher pub_left = nh.advertise<std_msgs::Float32>("/wamv/thrusters/left_thrust_cmd", 1);
     // 发布消息到右螺旋桨转速控制话题
-    ros::Publisher pub_right = nh.advertise<std_msgs::Float32>("/wamv/thrusters/right_thrust_cmd", 10);
+    ros::Publisher pub_right = nh.advertise<std_msgs::Float32>("/wamv/thrusters/right_thrust_cmd", 1);
 
-    // 启动异步 Spinner 处理回调
-    ros::AsyncSpinner spinner(2);
-    spinner.start();
+    ros::Rate rate(1.0 / dt);   // 控制频率
+    atomic<bool> alive(true);         // MPPI求解器是否运行
 
-    // 启动线程
-    thread pub_thread(publisherThread, ref(pub_left), ref(pub_right));
-    thread solve_thread(solverThread, ref(plant), ref(cost_params));
+    uint32_t step = 0;          // 当前步数
+    // 主循环
+    while (ros::ok())
+    {
+        control_array cmd;          // 控制指令消息
+        if (target_state_enable)
+        {
+            memcpy(cost_params.s_goal, target_state.data(), DYN_T::STATE_DIM * sizeof(float));
+            plant.setCostParams(cost_params);
+            plant.updateState(observed_state, (step + 1) * dt);
+            plant.runControlIteration(&alive);
 
-    // 等待 ROS 关闭
-    ros::waitForShutdown();
+            ROS_INFO("Avg Optimization time: %f ms", plant.getAvgOptimizationTime());
+            ROS_INFO("Last Optimization time: %f ms", plant.getLastOptimizationTime());
+            ROS_INFO("Avg Loop time: %f ms", plant.getAvgLoopTime());
+            ROS_INFO("Avg Optimization Hz: %f Hz", 1.0 / (plant.getAvgOptimizationTime() * 1e-3));
 
-    ROS_INFO("MPPI控制器关闭!");
+            cmd = controller->getControlSeq().col(0); // 取出控制指令
+        }
+        else
+        {
+            cmd.setZero();
+        }
 
-    pub_thread.join();
-    solve_thread.join();
+        std_msgs::Float32 left_msg, right_msg;
+        left_msg.data = cmd[0];
+        right_msg.data = cmd[1];
+        pub_left.publish(left_msg);
+        pub_right.publish(right_msg);
+        step++;
+        rate.sleep();
+        ros::spinOnce();
+    }
+    ROS_INFO("程序结束！");
+
+
     return 0;
 }

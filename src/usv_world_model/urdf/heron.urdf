@@ -199,7 +199,7 @@
       </geometry>
     </collision>
     <inertial>
-      <mass value="0.1" />
+      <mass value="0.01" />
       <inertia ixx="0.889245" ixy="0.0" ixz="0.0" iyy="0.911125" iyz="0.0" izz="0.078125" />
     </inertial>
   </link>
@@ -216,7 +216,7 @@
       </geometry>
     </collision>
     <inertial>
-      <mass value="0.1" />
+      <mass value="0.01" />
       <inertia ixx="0.008545" ixy="0.0" ixz="0.0" iyy="0.008545" iyz="0.0" izz="0.0144" />
     </inertial>
   </link>
@@ -254,7 +254,7 @@
       </geometry>
     </collision>
     <inertial>
-      <mass value="0.1" />
+      <mass value="0.01" />
       <inertia ixx="0.889245" ixy="0.0" ixz="0.0" iyy="0.911125" iyz="0.0" izz="0.078125" />
     </inertial>
   </link>
@@ -271,7 +271,7 @@
       </geometry>
     </collision>
     <inertial>
-      <mass value="0.1" />
+      <mass value="0.01" />
       <inertia ixx="0.008545" ixy="0.0" ixz="0.0" iyy="0.008545" iyz="0.0" izz="0.0144" />
     </inertial>
   </link>
@@ -360,12 +360,11 @@
     <plugin name="p3d_plugin_wamv" filename="libgazebo_ros_p3d.so">
       <bodyName>wamv/base_link</bodyName>
       <frameName>map</frameName>
-      <updateRate>50.0</updateRate>
+      <updateRate>10.0</updateRate>
       <topicName>wamv/p3d_position</topicName>
       <xyzOffset>0 0 0</xyzOffset>
       <rpyOffset>0 0 0</rpyOffset>
-      <gaussianNoise>0</gaussianNoise>
-      <localTwist>true</localTwist>
+      <gaussianNoise>0.0</gaussianNoise>
     </plugin>
   </gazebo>
 
