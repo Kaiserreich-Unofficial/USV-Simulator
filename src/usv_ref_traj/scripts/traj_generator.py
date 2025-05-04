@@ -41,6 +41,38 @@ def generate_eight_traj(total_steps, dt):
         traj[i, :] = [x, y, psi, uv_r[0], uv_r[1], uv_r[2]]
     return traj
 
+def generate_sp_traj(total_steps, dt):
+    traj = np.zeros((total_steps, 6))
+    for i in range(total_steps):
+        traj[i, :] = [5, 5, 1.57, 0, 0, 0]
+    return traj
+
+def generate_circle_traj(total_steps, dt):
+    """
+    生成八字轨迹：返回 shape=(N,6) 的数组，
+    列分别为 [x, y, psi, u, v, r]
+    """
+    radius = 5.0
+    omega = 0.2
+
+    traj = np.zeros((total_steps, 6))
+    for i in range(total_steps):
+        t = i * dt
+        # 位置
+        x = radius * np.cos(omega * t - np.pi/2)
+        y = radius * np.sin(omega * t - np.pi/2)
+
+        # 航向角及角速度
+        psi     = omega * t
+
+        # 计算船体坐标系下的线速度 (u,v) 和角速度 r
+        u = radius * omega
+        v = 0
+        r = omega
+
+        traj[i, :] = [x, y, psi, u, v, r]
+    return traj
+
 def save_csv(filename, traj):
     """
     使用 numpy.savetxt 将轨迹保存为 CSV
@@ -51,12 +83,13 @@ def save_csv(filename, traj):
 def publish_trajectory():
     rospy.init_node('target_position_publisher')
     pub = rospy.Publisher('/wamv/target_position', Odometry, queue_size=10)
-    rate = rospy.Rate(10)  # 10Hz
+
 
     total_steps = 50000
-    dt          = 0.1
+    dt          = 0.05
+    rate = rospy.Rate(1/dt)  # 10Hz
 
-    traj = generate_eight_traj(total_steps, dt)
+    traj = generate_circle_traj(total_steps, dt)
     # save_csv('target_trajectory.csv', traj)
 
     for i in range(total_steps):

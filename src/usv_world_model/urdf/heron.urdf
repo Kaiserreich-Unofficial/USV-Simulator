@@ -301,7 +301,7 @@
         <engineJointName>wamv/left_chasis_engine_joint</engineJointName>
         <cmdTopic>thrusters/left_thrust_cmd</cmdTopic>
         <angleTopic>thrusters/left_thrust_angle</angleTopic>
-        <enableAngle>True</enableAngle>
+        <enableAngle>False</enableAngle>
 
         <mappingType>1</mappingType>
         <maxCmd>1.0</maxCmd>
@@ -360,7 +360,7 @@
     <plugin name="p3d_plugin_wamv" filename="libgazebo_ros_p3d.so">
       <bodyName>wamv/base_link</bodyName>
       <frameName>map</frameName>
-      <updateRate>10.0</updateRate>
+      <updateRate>50.0</updateRate>
       <topicName>wamv/p3d_position</topicName>
       <xyzOffset>0 0 0</xyzOffset>
       <rpyOffset>0 0 0</rpyOffset>
