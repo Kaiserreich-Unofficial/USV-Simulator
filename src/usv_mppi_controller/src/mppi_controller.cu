@@ -60,6 +60,11 @@ uint32_t step = 0;
 ros::Publisher pub_left;
 ros::Publisher pub_right;
 
+bool hbeat_received_ = false;
+bool continuous_hb_received_ = false; // 用于首次恢复/丢失时打印日志
+double hbeat_target_time = 0.0;
+float heartbeat_duration = 0.5; // 心跳超时时间（秒），可通过 ROS 参数配置
+
 // Observer callback
 void observer_cb(const nav_msgs::Odometry &state)
 {
@@ -74,14 +79,18 @@ void observer_cb(const nav_msgs::Odometry &state)
 // Target callback
 void target_cb(const nav_msgs::Odometry &state)
 {
-    if (!target_state_enable)
-        target_state_enable = true;
     target_state[0] = state.pose.pose.position.x;
     target_state[1] = state.pose.pose.position.y;
     target_state[2] = tf::getYaw(state.pose.pose.orientation);
     target_state[3] = state.twist.twist.linear.x;
     target_state[4] = state.twist.twist.linear.y;
     target_state[5] = state.twist.twist.angular.z;
+    if (!continuous_hb_received_)
+    {
+        ROS_INFO("心跳信号恢复，重新启动控制器...");
+        continuous_hb_received_ = true;
+    }
+    hbeat_received_ = true;
 }
 
 // Timer callback: main MPC loop
@@ -90,26 +99,48 @@ void mpc_timer_cb(const ros::TimerEvent &event,
                   PLANT_T *plant,
                   COST_PARAM_T &cost_params)
 {
+    // 心跳超时检测
+    double now = ros::Time::now().toSec();
+    if (now > hbeat_target_time)
+    {
+        if (hbeat_received_)
+        {
+            // 本周期收到心跳，允许输出推进命令
+            hbeat_received_ = false;
+            // （推进器正常由后面的 pub_left/pub_right 发布）
+        }
+        else
+        {
+            // 丢失心跳，停用推进器
+            if (continuous_hb_received_)
+            {
+                ROS_WARN("心跳信号丢失 — 推进器已禁用！");
+                continuous_hb_received_ = false;
+            }
+            std_msgs::Float32 zero;
+            zero.data = 0.0f;
+            pub_left.publish(zero);
+            pub_right.publish(zero);
+            return; // 跳过下发真实命令
+        }
+        // 设定下一个心跳检测点
+        hbeat_target_time = now + heartbeat_duration;
+    }
+
     control_array cmd;
-    if (target_state_enable)
-    {
-        memcpy(cost_params.s_goal, target_state.data(), DYN_T::STATE_DIM * sizeof(float));
-        plant->setCostParams(cost_params);
-        plant->updateState(observed_state, (step + 1) * dt);
-        plant->runControlIteration(&alive);
+    memcpy(cost_params.s_goal, target_state.data(), DYN_T::STATE_DIM * sizeof(float));
+    plant->setCostParams(cost_params);
+    plant->updateState(observed_state, (step + 1) * dt);
+    plant->runControlIteration(&alive);
 
-        ROS_INFO("Avg Optimization time: %f ms", plant->getAvgOptimizationTime());
-        ROS_INFO("Last Optimization time: %f ms", plant->getLastOptimizationTime());
-        ROS_INFO("Avg Loop time: %f ms", plant->getAvgLoopTime());
-        ROS_INFO("Avg Optimization Hz: %f Hz", 1.0 / (plant->getAvgOptimizationTime() * 1e-3));
+    ROS_INFO("平均优化时间: %f ms", plant->getAvgOptimizationTime());
+    ROS_INFO("上次优化时间: %f ms", plant->getLastOptimizationTime());
+    // ROS_INFO("Avg Loop time: %f ms", plant->getAvgLoopTime());
+    // ROS_INFO("Avg Optimization Hz: %f Hz", 1.0 / (plant->getAvgOptimizationTime() * 1e-3));
 
-        cmd = controller->getControlSeq().col(0);
-        step++;
-    }
-    else
-    {
-        cmd.setZero();
-    }
+    cmd = controller->getControlSeq().col(0);
+    step++;
+
     std_msgs::Float32 left_msg, right_msg;
     left_msg.data = cmd[0] / MAX_CTRL;
     right_msg.data = cmd[1] / MAX_CTRL;
@@ -132,6 +163,9 @@ int main(int argc, char *argv[])
     nh.param<float>("lambda", _lambda, 1.0);
     nh.param<float>("alpha", _alpha, 0.0);
     nh.param<int>("max_iter", max_iter, 1);
+    // 读取心跳超时参数
+    nh.param<float>("heartbeat_duration", heartbeat_duration, 0.5f);
+    hbeat_target_time = ros::Time::now().toSec() + heartbeat_duration;
 
     // Init dynamics, cost, controller
     DYN_T dynamics;
@@ -177,6 +211,6 @@ int main(int argc, char *argv[])
     // Spin to process callbacks
     ros::spin();
 
-    ROS_INFO("Program ended");
+    ROS_INFO("程序终止");
     return 0;
 }
