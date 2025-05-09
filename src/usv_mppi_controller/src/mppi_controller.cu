@@ -28,7 +28,7 @@
 using namespace std;
 
 int DYN_BLOCK_X;
-using DYN_T = heron::USVDynamics;
+using DYN_T = wamv::USVDynamics;
 const int DYN_BLOCK_Y = DYN_T::STATE_DIM;
 using COST_T = QuadraticCost<DYN_T>;
 using COST_PARAM_T = QuadraticCostTrajectoryParams<DYN_T>;
@@ -36,7 +36,7 @@ using FB_T = DDPFeedback<DYN_T, 100>;
 using SAMPLING_T = mppi::sampling_distributions::ColoredNoiseDistribution<DYN_T::DYN_PARAMS_T>;
 using CONTROLLER_T = VanillaMPPIController<DYN_T, COST_T, FB_T, 100, 4096, SAMPLING_T>;
 using CONTROLLER_PARAMS_T = CONTROLLER_T::TEMPLATED_PARAMS;
-using PLANT_T = heron::USVMPCPlant<CONTROLLER_T>;
+using PLANT_T = wamv::USVMPCPlant<CONTROLLER_T>;
 using state_array = DYN_T::state_array;
 using control_array = DYN_T::control_array;
 
@@ -142,8 +142,8 @@ void mpc_timer_cb(const ros::TimerEvent &event,
     step++;
 
     std_msgs::Float32 left_msg, right_msg;
-    left_msg.data = cmd[0] / MAX_CTRL;
-    right_msg.data = cmd[1] / MAX_CTRL;
+    left_msg.data = cmd[0] > 0 ? cmd[0] / 250 : cmd[0] / 100;
+    right_msg.data = cmd[1] > 0 ? cmd[1] / 250 : cmd[1] / 100;
     pub_left.publish(left_msg);
     pub_right.publish(right_msg);
 }
@@ -166,6 +166,13 @@ int main(int argc, char *argv[])
     // 读取心跳超时参数
     nh.param<float>("heartbeat_duration", heartbeat_duration, 0.5f);
     hbeat_target_time = ros::Time::now().toSec() + heartbeat_duration;
+
+    // 读取话题名称
+    std::string obs_topic, tgt_topic, left_thrust_topic, right_thrust_topic;
+    nh.param<std::string>("topics/observation", obs_topic, "/wamv/p3d_position");
+    nh.param<std::string>("topics/target", tgt_topic, "/wamv/target_position");
+    nh.param<std::string>("topics/left_thrust", left_thrust_topic, "/wamv/thrusters/left_thrust_cmd");
+    nh.param<std::string>("topics/right_thrust", right_thrust_topic, "/wamv/thrusters/right_thrust_cmd");
 
     // Init dynamics, cost, controller
     DYN_T dynamics;
@@ -198,11 +205,11 @@ int main(int argc, char *argv[])
     ROS_INFO("MPPI控制器初始化完成!");
     ROS_INFO("预测域: %d, 步长: %.2f, 控制标准差: %.2f", horizon, dt, MAX_CTRL);
 
-    // Subscribers & Publishers
-    ros::Subscriber sub_obs = nh.subscribe("/wamv/p3d_position", 1, observer_cb);
-    ros::Subscriber sub_tgt = nh.subscribe("/wamv/target_position", 1, target_cb);
-    pub_left = nh.advertise<std_msgs::Float32>("/wamv/thrusters/left_thrust_cmd", 100);
-    pub_right = nh.advertise<std_msgs::Float32>("/wamv/thrusters/right_thrust_cmd", 100);
+    // 设置订阅和发布
+    ros::Subscriber sub_obs = nh.subscribe(obs_topic, 1, observer_cb);
+    ros::Subscriber sub_tgt = nh.subscribe(tgt_topic, 1, target_cb);
+    pub_left = nh.advertise<std_msgs::Float32>(left_thrust_topic, 100);
+    pub_right = nh.advertise<std_msgs::Float32>(right_thrust_topic, 100);
 
     // Timer for MPC at rate dt
     ros::Timer mpc_timer = nh.createTimer(ros::Duration(dt), boost::bind(&mpc_timer_cb, _1,

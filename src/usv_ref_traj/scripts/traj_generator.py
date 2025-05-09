@@ -101,8 +101,8 @@ def publish_trajectory():
         # 构造 Odometry 消息
         odom = Odometry()
         odom.header.stamp    = rospy.Time.now()
-        odom.header.frame_id = 'odom'
-        odom.child_frame_id  = 'base_link'
+        odom.header.frame_id = 'map'
+        odom.child_frame_id  = 'wamv/base_link'
 
         # 位姿
         odom.pose.pose.position.x = x
