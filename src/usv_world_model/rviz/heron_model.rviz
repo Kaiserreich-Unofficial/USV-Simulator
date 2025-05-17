@@ -5,10 +5,14 @@ Panels:
     Property Tree Widget:
       Expanded:
         - /Global Options1
+        - /Status1
+        - /Grid1
+        - /Odometry1
         - /Odometry1/Shape1
         - /Axes1
         - /Odometry2
         - /Odometry2/Shape1
+        - /Odometry2/Covariance1
       Splitter Ratio: 0.5
     Tree Height: 555
   - Class: rviz/Selection
@@ -51,7 +55,7 @@ Visualization Manager:
         Y: 0
         Z: 0
       Plane: XY
-      Plane Cell Count: 10
+      Plane Cell Count: 100
       Reference Frame: <Fixed Frame>
       Value: true
     - Angle Tolerance: 0.10000000149011612
@@ -86,7 +90,7 @@ Visualization Manager:
         Shaft Length: 0.10000000149011612
         Shaft Radius: 0.05000000074505806
         Value: Arrow
-      Topic: /wamv/p3d_position
+      Topic: /wamv/sensors/position/p3d_wamv
       Unreliable: false
       Value: true
     - Alpha: 1
@@ -138,7 +142,7 @@ Visualization Manager:
     Background Color: 48; 48; 48
     Default Light: true
     Fixed Frame: map
-    Frame Rate: 30
+    Frame Rate: 50
   Name: root
   Tools:
     - Class: rviz/Interact
@@ -161,7 +165,7 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz/Orbit
-      Distance: 33.367286682128906
+      Distance: 147.62059020996094
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
         Stereo Focal Distance: 1
@@ -169,17 +173,17 @@ Visualization Manager:
         Value: false
       Field of View: 0.7853981852531433
       Focal Point:
-        X: 0.269014835357666
-        Y: -0.02591853216290474
-        Z: -0.1718951314687729
+        X: 2.1560356616973877
+        Y: 2.6707592010498047
+        Z: 3.5198137760162354
       Focal Shape Fixed Size: true
       Focal Shape Size: 0.05000000074505806
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Pitch: 1.520397424697876
+      Pitch: 1.5153974294662476
       Target Frame: <Fixed Frame>
-      Yaw: 6.278583526611328
+      Yaw: 0.025397680699825287
     Saved: ~
 Window Geometry:
   Displays:
@@ -197,5 +201,5 @@ Window Geometry:
   Views:
     collapsed: false
   Width: 1200
-  X: 258
-  Y: 34
+  X: 226
+  Y: 2

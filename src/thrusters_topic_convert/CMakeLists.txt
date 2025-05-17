@@ -1,35 +1,19 @@
 cmake_minimum_required(VERSION 3.0.2)
-cmake_policy(SET CMP0069 NEW)
-project(usv_mppi_controller LANGUAGES C CXX CUDA)
+project(thrusters_topic_convert)
 
 ## Compile as C++11, supported in ROS Kinetic and newer
 # add_compile_options(-std=c++11)
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3 -march=native -flto")
 
 ## Find catkin macros and libraries
 ## if COMPONENTS list like find_package(catkin REQUIRED COMPONENTS xyz)
 ## is used, also find other catkin packages
 find_package(catkin REQUIRED COMPONENTS
-  geometry_msgs
+  mavros_msgs
   roscpp
   rospy
-  tf
   std_msgs
 )
-
-# Fetch MPPI-Generic
-set(MPPIGeneric_DIR "../MPPI-Generic")
-set(MPPIGenericTools_DIR "${MPPIGeneric_DIR}/cmake/")
-add_subdirectory(${MPPIGeneric_DIR} ${CMAKE_CURRENT_BINARY_DIR}/MPPI-Generic)
-
-find_package(MPPIGenericTools CONFIG REQUIRED)
-find_package(Eigen3 REQUIRED)
-
-set(CMAKE_CUDA_STANDARD 14)
-set(CMAKE_CUDA_STANDARD_REQUIRED ON)
-
-# Enable advanced optimizations
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3 -march=native -flto")
-set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -O3 -diag-suppress=20011,20012,20013,20014,20015")
 
 ## System dependencies are found with CMake's conventions
 # find_package(Boost REQUIRED COMPONENTS system)
@@ -88,7 +72,7 @@ set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -O3 -diag-suppress=20011,20012,20013,2
 ## Generate added messages and services with any dependencies listed here
 # generate_messages(
 #   DEPENDENCIES
-#   geometry_msgs#   std_msgs
+#   mavros_msgs#   std_msgs
 # )
 
 ################################################
@@ -122,8 +106,8 @@ set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -O3 -diag-suppress=20011,20012,20013,2
 ## DEPENDS: system dependencies of this project that dependent projects also need
 catkin_package(
 #  INCLUDE_DIRS include
-#  LIBRARIES usv_mppi_controller
-#  CATKIN_DEPENDS geometry_msgs roscpp rospy std_msgs
+#  LIBRARIES thrusters_topic_convert
+#  CATKIN_DEPENDS mavros_msgs roscpp rospy std_msgs
 #  DEPENDS system_lib
 )
 
@@ -134,36 +118,26 @@ catkin_package(
 ## Specify additional locations of header files
 ## Your package locations should be listed before other locations
 include_directories(
-include
+# include
   ${catkin_INCLUDE_DIRS}
-  ${CMAKE_CURRENT_SOURCE_DIR}
-  ${CMAKE_CURRENT_SOURCE_DIR}/include
-  ${MPPIGeneric_DIR}/include
-  ${EIGEN3_INCLUDE_DIRS}
 )
+
+## Declare a C++ library
+# add_library(${PROJECT_NAME}
+#   src/${PROJECT_NAME}/thrusters_topic_convert.cpp
+# )
 
 ## Add cmake target dependencies of the library
 ## as an example, code may need to be generated before libraries
 ## either from message generation or dynamic reconfigure
+# add_dependencies(${PROJECT_NAME} ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
+
 ## Declare a C++ executable
 ## With catkin_make all packages are built within a single CMake context
 ## The recommended prefix ensures that target names across packages don't collide
-# Check for IPO support
-include(CheckIPOSupported)
-check_ipo_supported(RESULT ipo_supported OUTPUT ipo_check_output)
+# add_executable(${PROJECT_NAME}_node src/thrusters_topic_convert_node.cpp)
+add_executable(thrusters_topic_convert src/thrusters_topic_convert.cc)
 
-# Enable LTO if supported
-if(ipo_supported)
-  set_target_properties(${T_NAME} PROPERTIES INTERPROCEDURAL_OPTIMIZATION TRUE)
-else()
-  message(WARNING "IPO is not supported: ${ipo_check_output}")
-endif()
-
-add_executable(mppi_controller src/mppi_controller.cu)
-add_executable(dynamics_test src/dynamics_test.cu)
-# add_dependencies(head_src ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
-add_dependencies(mppi_controller ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
-add_dependencies(dynamics_test ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 ## Rename C++ executable without prefix
 ## The above recommended prefix causes long target names, the following renames the
 ## target back to the shorter version for ease of user use
@@ -173,22 +147,14 @@ add_dependencies(dynamics_test ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPO
 ## Add cmake target dependencies of the executable
 ## same as for the library above
 # add_dependencies(${PROJECT_NAME}_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
+add_dependencies(thrusters_topic_convert ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 
 ## Specify libraries to link a library or executable target against
-target_link_libraries(mppi_controller
-  ${CMAKE_CURRENT_SOURCE_DIR}
-  ${CMAKE_CURRENT_SOURCE_DIR}/include
+# target_link_libraries(${PROJECT_NAME}_node
+#   ${catkin_LIBRARIES}
+# )
+target_link_libraries(thrusters_topic_convert
   ${catkin_LIBRARIES}
-  MPPI::MPPI
-  Eigen3::Eigen
-)
-
-target_link_libraries(dynamics_test
-  ${CMAKE_CURRENT_SOURCE_DIR}
-  ${CMAKE_CURRENT_SOURCE_DIR}/include
-  ${catkin_LIBRARIES}
-  MPPI::MPPI
-  Eigen3::Eigen
 )
 
 #############
@@ -238,7 +204,7 @@ target_link_libraries(dynamics_test
 #############
 
 ## Add gtest based cpp test target and link libraries
-# catkin_add_gtest(${PROJECT_NAME}-test test/test_usv_mppi_controller.cpp)
+# catkin_add_gtest(${PROJECT_NAME}-test test/test_thrusters_topic_convert.cpp)
 # if(TARGET ${PROJECT_NAME}-test)
 #   target_link_libraries(${PROJECT_NAME}-test ${PROJECT_NAME})
 # endif()

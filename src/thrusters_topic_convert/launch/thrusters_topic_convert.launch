@@ -1,0 +1,7 @@
+<launch>
+    <!-- 加载整个 YAML 文件 -->
+    <rosparam command="load" file="$(find thrusters_topic_convert)/config/config.yaml" />
+
+    <!-- 启动节点 -->
+    <node name="thrusters_topic_convert" pkg="thrusters_topic_convert" type="thrusters_topic_convert" output="screen" />
+  </launch>

@@ -1,0 +1,17 @@
+<launch>
+  <!-- 加载配置 -->
+  <rosparam command="load" file="$(find usv_mppi_controller)/config/config.yaml"/>
+
+  <!-- 启动 dynamics_test 节点 -->
+  <node name="dynamics_test"
+        pkg="usv_mppi_controller"
+        type="dynamics_test"
+        output="screen" />
+
+  <!-- 发布 map -> base_link 的静态坐标变换 -->
+  <node pkg="tf"
+        type="static_transform_publisher"
+        name="map_to_base"
+        output="screen"
+        args="0 0 0   0 0 0   map base_link 100" />
+</launch>

@@ -30,7 +30,7 @@
        H = stern trusters on each hull
        T = H with a lateral thruster
        X = "holonomic" configuration -->
-  <arg name="thrust_config" default="T" />
+  <arg name="thrust_config" default="H" />
 
   <!-- Do we load the VRX sensor suite? -->
   <arg name="vrx_sensors_enabled" default="false" />
@@ -48,11 +48,7 @@
 
   <!-- Load robot model -->
   <!-- Determine which model -->
-  <arg name="h_config" value="$(eval int((thrust_config)=='H'))"/>
-  <arg name="t_config" value="$(eval int((thrust_config)=='T'))"/>
-  <arg name="x_config" value="$(eval int((thrust_config)=='X'))"/>
-
-  <arg if="$(arg t_config)" name="urdf" default="$(find wamv_gazebo)/urdf/wamv_gazebo.urdf.xacro"/>
+  <arg name="urdf" default="$(find usv_world_model)/urdf/wamv.urdf"/>
 
   <param name="$(arg namespace)/robot_description"
          command="$(find xacro)/xacro &#x002D;&#x002D;inorder '$(arg urdf)'
