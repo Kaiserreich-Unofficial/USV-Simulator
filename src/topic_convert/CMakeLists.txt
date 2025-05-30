@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.0.2)
-project(thrusters_topic_convert)
+project(topic_convert)
 
 ## Compile as C++11, supported in ROS Kinetic and newer
 # add_compile_options(-std=c++11)
@@ -108,7 +108,7 @@ find_package(catkin REQUIRED COMPONENTS
 ## DEPENDS: system dependencies of this project that dependent projects also need
 catkin_package(
 #  INCLUDE_DIRS include
-#  LIBRARIES thrusters_topic_convert
+#  LIBRARIES topic_convert
 #  CATKIN_DEPENDS mavros_msgs roscpp rospy std_msgs
 #  DEPENDS system_lib
 )
@@ -126,7 +126,7 @@ include_directories(
 
 ## Declare a C++ library
 # add_library(${PROJECT_NAME}
-#   src/${PROJECT_NAME}/thrusters_topic_convert.cpp
+#   src/${PROJECT_NAME}/topic_convert.cpp
 # )
 
 ## Add cmake target dependencies of the library
@@ -137,8 +137,8 @@ include_directories(
 ## Declare a C++ executable
 ## With catkin_make all packages are built within a single CMake context
 ## The recommended prefix ensures that target names across packages don't collide
-# add_executable(${PROJECT_NAME}_node src/thrusters_topic_convert_node.cpp)
-add_executable(thrusters_topic_convert src/thrusters_topic_convert.cc)
+# add_executable(${PROJECT_NAME}_node src/topic_convert_node.cpp)
+add_executable(topic_convert src/topic_convert.cc)
 
 ## Rename C++ executable without prefix
 ## The above recommended prefix causes long target names, the following renames the
@@ -149,13 +149,13 @@ add_executable(thrusters_topic_convert src/thrusters_topic_convert.cc)
 ## Add cmake target dependencies of the executable
 ## same as for the library above
 # add_dependencies(${PROJECT_NAME}_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
-add_dependencies(thrusters_topic_convert ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
+add_dependencies(topic_convert ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 
 ## Specify libraries to link a library or executable target against
 # target_link_libraries(${PROJECT_NAME}_node
 #   ${catkin_LIBRARIES}
 # )
-target_link_libraries(thrusters_topic_convert
+target_link_libraries(topic_convert
   ${catkin_LIBRARIES}
 )
 
@@ -210,7 +210,7 @@ catkin_install_python(PROGRAMS
 #############
 
 ## Add gtest based cpp test target and link libraries
-# catkin_add_gtest(${PROJECT_NAME}-test test/test_thrusters_topic_convert.cpp)
+# catkin_add_gtest(${PROJECT_NAME}-test test/test_topic_convert.cpp)
 # if(TARGET ${PROJECT_NAME}-test)
 #   target_link_libraries(${PROJECT_NAME}-test ${PROJECT_NAME})
 # endif()

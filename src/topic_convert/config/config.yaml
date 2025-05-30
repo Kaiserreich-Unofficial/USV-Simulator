@@ -1,0 +1,3 @@
+heartbeat_interval: 0.5
+left_thrust_topic:/wamv/thrusters/left_thrust_cmd
+right_thrust_topic:/wamv/thrusters/right_thrust_cmd

@@ -12,12 +12,15 @@ public:
         ros::NodeHandle pnh("~");
 
         // 从参数服务器读取心跳间隔（秒），默认为 0.1 秒
-        double hb_sec;
-        pnh.param("heartbeat_interval", hb_sec, 0.1);
+        float hb_sec;
+        std::string left_thrust_topic, right_thrust_topic; // 从参数服务器读取左右推力话题名称，默认为 "/wamv/thrusters/left_thrust_cmd" 和 "/wamv/thrusters/right_thrust_cmd"
+        pnh.param<float>("heartbeat_interval", hb_sec, 0.1);
+        pnh.param<std::string>("topics/left_thrust_topic", left_thrust_topic, "/wamv/thrusters/left_thrust_cmd");
+        pnh.param<std::string>("topics/right_thrust_topic", right_thrust_topic, "/wamv/thrusters/right_thrust_cmd");
         heartbeat_interval_ = ros::Duration(hb_sec);
 
-        left_sub_ = nh.subscribe("/wamv/thrusters/left_thrust_cmd", 10, &RCOutPublisher::leftCallback, this);
-        right_sub_ = nh.subscribe("/wamv/thrusters/right_thrust_cmd", 10, &RCOutPublisher::rightCallback, this);
+        left_sub_ = nh.subscribe(left_thrust_topic, 10, &RCOutPublisher::leftCallback, this);
+        right_sub_ = nh.subscribe(right_thrust_topic, 10, &RCOutPublisher::rightCallback, this);
 
         rcout_pub_ = nh.advertise<mavros_msgs::RCOut>("/mavros/rc/out", 10);
 
