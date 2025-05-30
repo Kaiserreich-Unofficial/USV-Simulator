@@ -68,10 +68,11 @@ private:
 
         msg_.header.stamp = now;
         msg_.channels[0] = left_rc;
-        msg_.channels[1] = right_rc;
+        msg_.channels[1] = 1500; // 中立位置
+        msg_.channels[2] = right_rc;
 
         // 其他通道置 0（或中立）
-        for (size_t i = 2; i < msg_.channels.size(); ++i) {
+        for (size_t i = 3; i < msg_.channels.size(); ++i) {
             msg_.channels[i] = 0;
         }
 
