@@ -48,9 +48,10 @@ vector<float> x_weight = {10, 10, 10, 10, 10, 10};
 float _lambda;
 float _alpha;
 int max_iter;
-bool sim_enable;
-float sim_total_time;
-int sim_times;
+
+float stddev; // std dev of noise
+float exponents; // Colored noise exponents
+
 state_array observed_state;
 state_array target_state;
 bool target_state_enable = false;
@@ -138,12 +139,12 @@ void mpc_timer_cb(const ros::TimerEvent &event,
     // ROS_INFO("Avg Loop time: %f ms", plant->getAvgLoopTime());
     // ROS_INFO("Avg Optimization Hz: %f Hz", 1.0 / (plant->getAvgOptimizationTime() * 1e-3));
 
-    cmd = controller->getControlSeq().col(0) * 2; // 从[-.5, .5] 转换到 [-1, 1]
+    cmd = controller->getControlSeq().col(0); // 从[-.5, .5] 转换到 [-1, 1]
     step++;
 
     std_msgs::Float32 left_msg, right_msg;
-    left_msg.data = cmd[0];
-    right_msg.data = cmd[1];
+    left_msg.data = cmd[0] * 2;
+    right_msg.data = cmd[1] * 2;
     pub_left.publish(left_msg);
     pub_right.publish(right_msg);
 }
@@ -163,13 +164,15 @@ int main(int argc, char *argv[])
     nh.param<float>("lambda", _lambda, 1.0);
     nh.param<float>("alpha", _alpha, 0.0);
     nh.param<int>("max_iter", max_iter, 1);
+    nh.param<float>("stddev", stddev, 1.0);
+    nh.param<float>("exponents", exponents, 1.0);
     // 读取心跳超时参数
     nh.param<float>("heartbeat_duration", heartbeat_duration, 0.5f);
     hbeat_target_time = ros::Time::now().toSec() + heartbeat_duration;
 
     // 读取话题名称
     std::string obs_topic, tgt_topic, left_thrust_topic, right_thrust_topic;
-    nh.param<std::string>("topics/observation", obs_topic, "/wamv/p3d_position");
+    nh.param<std::string>("topics/observation", obs_topic, "/wamv/sensors/position/p3d_wamv");
     nh.param<std::string>("topics/target", tgt_topic, "/wamv/target_position");
     nh.param<std::string>("topics/left_thrust", left_thrust_topic, "/wamv/thrusters/left_thrust_cmd");
     nh.param<std::string>("topics/right_thrust", right_thrust_topic, "/wamv/thrusters/right_thrust_cmd");
@@ -186,8 +189,8 @@ int main(int argc, char *argv[])
     auto sampler_params = sampler.getParams();
     for (int i = 0; i < DYN_T::CONTROL_DIM; i++)
     {
-        sampler_params.std_dev[i] = .5;
-        sampler_params.exponents[i] = 1.f;
+        sampler_params.std_dev[i] = stddev;
+        sampler_params.exponents[i] = exponents;
     }
     sampler.setParams(sampler_params);
     CONTROLLER_PARAMS_T controller_params;
@@ -203,13 +206,13 @@ int main(int argc, char *argv[])
     // Create MPC plant
     PLANT_T plant(controller, 1.0 / dt, 1);
     ROS_INFO("MPPI控制器初始化完成!");
-    ROS_INFO("预测域: %d, 步长: %.2f, 控制标准差: %.2f", horizon, dt, .5);
+    ROS_INFO("预测域: %d, 步长: %.2f, 控制标准差: %.2f", horizon, dt, stddev);
 
     // 设置订阅和发布
     ros::Subscriber sub_obs = nh.subscribe(obs_topic, 1, observer_cb);
     ros::Subscriber sub_tgt = nh.subscribe(tgt_topic, 1, target_cb);
-    pub_left = nh.advertise<std_msgs::Float32>(left_thrust_topic, 100);
-    pub_right = nh.advertise<std_msgs::Float32>(right_thrust_topic, 100);
+    pub_left = nh.advertise<std_msgs::Float32>(left_thrust_topic, 1);
+    pub_right = nh.advertise<std_msgs::Float32>(right_thrust_topic, 1);
 
     // Timer for MPC at rate dt
     ros::Timer mpc_timer = nh.createTimer(ros::Duration(dt), boost::bind(&mpc_timer_cb, _1,

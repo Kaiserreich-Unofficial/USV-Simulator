@@ -7,6 +7,7 @@ lambda : 1.0 # 正则化/学习率参数
 alpha : 0.0 # 探索参数
 iter: 1 # 滚动优化迭代次数
 heartbeat_duration: 0.1 # 控制器心跳周期
+stddev: 0.5 # 控制器噪声标准差
 topics:
   observation: /wamv/sensors/position/p3d_wamv
   target: /wamv/target_position

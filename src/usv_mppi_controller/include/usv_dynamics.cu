@@ -2,10 +2,11 @@
 #include <usv_dynamics.cuh>
 
 // 定义符号函数
+/*
 float sign(float x)
 {
     return (x > 0) - (x < 0);
-}
+}*/
 
 namespace wamv
 {
