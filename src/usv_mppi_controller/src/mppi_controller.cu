@@ -138,12 +138,12 @@ void mpc_timer_cb(const ros::TimerEvent &event,
     // ROS_INFO("Avg Loop time: %f ms", plant->getAvgLoopTime());
     // ROS_INFO("Avg Optimization Hz: %f Hz", 1.0 / (plant->getAvgOptimizationTime() * 1e-3));
 
-    cmd = controller->getControlSeq().col(0);
+    cmd = controller->getControlSeq().col(0) * 2; // 从[-.5, .5] 转换到 [-1, 1]
     step++;
 
     std_msgs::Float32 left_msg, right_msg;
-    left_msg.data = cmd[0] > 0 ? cmd[0] / 250 : cmd[0] / 100;
-    right_msg.data = cmd[1] > 0 ? cmd[1] / 250 : cmd[1] / 100;
+    left_msg.data = cmd[0];
+    right_msg.data = cmd[1];
     pub_left.publish(left_msg);
     pub_right.publish(right_msg);
 }
@@ -186,7 +186,7 @@ int main(int argc, char *argv[])
     auto sampler_params = sampler.getParams();
     for (int i = 0; i < DYN_T::CONTROL_DIM; i++)
     {
-        sampler_params.std_dev[i] = MAX_CTRL;
+        sampler_params.std_dev[i] = .5;
         sampler_params.exponents[i] = 1.f;
     }
     sampler.setParams(sampler_params);
@@ -203,7 +203,7 @@ int main(int argc, char *argv[])
     // Create MPC plant
     PLANT_T plant(controller, 1.0 / dt, 1);
     ROS_INFO("MPPI控制器初始化完成!");
-    ROS_INFO("预测域: %d, 步长: %.2f, 控制标准差: %.2f", horizon, dt, MAX_CTRL);
+    ROS_INFO("预测域: %d, 步长: %.2f, 控制标准差: %.2f", horizon, dt, .5);
 
     // 设置订阅和发布
     ros::Subscriber sub_obs = nh.subscribe(obs_topic, 1, observer_cb);

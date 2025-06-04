@@ -72,8 +72,3 @@ namespace wamv {
   template <typename CONTROLLER_T>
   using USVMPCPlant = GenericUSVMPCPlant<USVDynamics, CONTROLLER_T>;
 }
-
-namespace heron {
-  template <typename CONTROLLER_T>
-  using USVMPCPlant = GenericUSVMPCPlant<USVDynamics, CONTROLLER_T>;
-}

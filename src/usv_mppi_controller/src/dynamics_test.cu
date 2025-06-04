@@ -16,7 +16,7 @@
 
 using namespace std;
 
-using DYN_T = heron::USVDynamics;
+using DYN_T = wamv::USVDynamics;
 
 using state_array = DYN_T::state_array;
 using control_array = DYN_T::control_array;
@@ -57,7 +57,7 @@ void dyn_timer_cb(const ros::TimerEvent &event,
     state_array x_next, x_dot;
     output_array y;
 
-    dyn.step(tgt_state, x_next, x_dot, cmd * 20, y, t, dt);
+    dyn.step(tgt_state, x_next, x_dot, cmd, y, t, dt);
     nav_msgs::Odometry tgt_msgs;
 
     // tgt_msgs.header.stamp = ros::Time::now();
@@ -77,8 +77,8 @@ void dyn_timer_cb(const ros::TimerEvent &event,
     t += dt;
     ROS_INFO("Step: %ld, Time: %f", step, ros::Time::now().toSec());
     std_msgs::Float32 left_msg, right_msg;
-    left_msg.data = cmd[0];
-    right_msg.data = cmd[1];
+    left_msg.data = cmd[0] * 2;
+    right_msg.data = cmd[1] * 2;
     pub_left.publish(left_msg);
     pub_right.publish(right_msg);
 }
