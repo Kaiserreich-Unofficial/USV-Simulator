@@ -1,5 +1,4 @@
 cmake_minimum_required(VERSION 3.0.2)
-cmake_policy(SET CMP0069 NEW)
 project(usv_mppi_controller LANGUAGES C CXX CUDA)
 
 ## Compile as C++11, supported in ROS Kinetic and newer
@@ -28,7 +27,7 @@ set(CMAKE_CUDA_STANDARD 14)
 set(CMAKE_CUDA_STANDARD_REQUIRED ON)
 
 # Enable advanced optimizations
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3 -march=native -flto")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++14 -O3 -flto")
 set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -O3 -diag-suppress=20011,20012,20013,20014,20015")
 
 ## System dependencies are found with CMake's conventions
@@ -136,10 +135,7 @@ catkin_package(
 include_directories(
 include
   ${catkin_INCLUDE_DIRS}
-  ${CMAKE_CURRENT_SOURCE_DIR}
-  ${CMAKE_CURRENT_SOURCE_DIR}/include
   ${MPPIGeneric_DIR}/include
-  ${EIGEN3_INCLUDE_DIRS}
 )
 
 ## Add cmake target dependencies of the library
@@ -148,16 +144,6 @@ include
 ## Declare a C++ executable
 ## With catkin_make all packages are built within a single CMake context
 ## The recommended prefix ensures that target names across packages don't collide
-# Check for IPO support
-include(CheckIPOSupported)
-check_ipo_supported(RESULT ipo_supported OUTPUT ipo_check_output)
-
-# Enable LTO if supported
-if(ipo_supported)
-  set_target_properties(${T_NAME} PROPERTIES INTERPROCEDURAL_OPTIMIZATION TRUE)
-else()
-  message(WARNING "IPO is not supported: ${ipo_check_output}")
-endif()
 
 add_executable(mppi_controller src/mppi_controller.cu)
 add_executable(dynamics_test src/dynamics_test.cu)
@@ -176,16 +162,12 @@ add_dependencies(dynamics_test ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPO
 
 ## Specify libraries to link a library or executable target against
 target_link_libraries(mppi_controller
-  ${CMAKE_CURRENT_SOURCE_DIR}
-  ${CMAKE_CURRENT_SOURCE_DIR}/include
   ${catkin_LIBRARIES}
   MPPI::MPPI
   Eigen3::Eigen
 )
 
 target_link_libraries(dynamics_test
-  ${CMAKE_CURRENT_SOURCE_DIR}
-  ${CMAKE_CURRENT_SOURCE_DIR}/include
   ${catkin_LIBRARIES}
   MPPI::MPPI
   Eigen3::Eigen

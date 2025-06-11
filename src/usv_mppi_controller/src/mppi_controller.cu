@@ -27,9 +27,7 @@
 
 using namespace std;
 
-int DYN_BLOCK_X;
 using DYN_T = wamv::USVDynamics;
-const int DYN_BLOCK_Y = DYN_T::STATE_DIM;
 using COST_T = QuadraticCost<DYN_T>;
 using COST_PARAM_T = QuadraticCostTrajectoryParams<DYN_T>;
 using FB_T = DDPFeedback<DYN_T, 100>;
@@ -40,31 +38,30 @@ using PLANT_T = wamv::USVMPCPlant<CONTROLLER_T>;
 using state_array = DYN_T::state_array;
 using control_array = DYN_T::control_array;
 
-// Globals
-int num_rollouts;
-int horizon;
-float dt;
-vector<float> x_weight = {10, 10, 10, 10, 10, 10};
-float _lambda;
-float _alpha;
-int max_iter;
+int DYN_BLOCK_X;
+constexpr uint8_t DYN_BLOCK_Y = DYN_T::STATE_DIM;
+state_array observed_state = state_array::Zero();
+state_array target_state = state_array::Zero(); // 观测状态量和目标状态量
 
-float stddev; // std dev of noise
-float exponents; // Colored noise exponents
+DYN_T dynamics;
+COST_T cost;
+COST_PARAM_T cost_params = cost.getParams();
+SAMPLING_T sampler;
+auto sampler_params = sampler.getParams();
+CONTROLLER_PARAMS_T controller_params;
+std::shared_ptr<CONTROLLER_T> controller; // mpc controller
+std::shared_ptr<FB_T> fb_controller;      // feedback controller
+std::shared_ptr<PLANT_T> plant;           // mpc plant
 
-state_array observed_state;
-state_array target_state;
-bool target_state_enable = false;
-atomic<bool> alive(true);
-uint32_t step = 0;
-
-ros::Publisher pub_left;
-ros::Publisher pub_right;
-
+// 心跳保活机制
+float heartbeat_duration;
+double hbeat_target_time = 0.0;
 bool hbeat_received_ = false;
 bool continuous_hb_received_ = false; // 用于首次恢复/丢失时打印日志
-double hbeat_target_time = 0.0;
-float heartbeat_duration = 0.5; // 心跳超时时间（秒），可通过 ROS 参数配置
+
+// 推进消息发布
+ros::Publisher pub_left;
+ros::Publisher pub_right;
 
 // Observer callback
 void observer_cb(const nav_msgs::Odometry &state)
@@ -95,10 +92,7 @@ void target_cb(const nav_msgs::Odometry &state)
 }
 
 // Timer callback: main MPC loop
-void mpc_timer_cb(const ros::TimerEvent &event,
-                  shared_ptr<CONTROLLER_T> controller,
-                  PLANT_T *plant,
-                  COST_PARAM_T &cost_params)
+void mpc_timer_cb(const ros::TimerEvent &event)
 {
     // 心跳超时检测
     double now = ros::Time::now().toSec();
@@ -128,23 +122,22 @@ void mpc_timer_cb(const ros::TimerEvent &event,
         hbeat_target_time = now + heartbeat_duration;
     }
 
+    static atomic<bool> alive(true); // 信号量，用于控制控制器的运行
     control_array cmd;
     memcpy(cost_params.s_goal, target_state.data(), DYN_T::STATE_DIM * sizeof(float));
     plant->setCostParams(cost_params);
-    plant->updateState(observed_state, (step + 1) * dt);
+    plant->updateState(observed_state, ros::Time::now().toSec());
     plant->runControlIteration(&alive);
 
-    ROS_INFO("平均优化时间: %f ms", plant->getAvgOptimizationTime());
-    ROS_INFO("上次优化时间: %f ms", plant->getLastOptimizationTime());
+    ROS_INFO_STREAM("平均优化时间: " << std::fixed << std::setprecision(1) << plant->getAvgOptimizationTime() << " ms, 上次优化时间: " << std::setprecision(1) << plant->getLastOptimizationTime() << " ms");
     // ROS_INFO("Avg Loop time: %f ms", plant->getAvgLoopTime());
     // ROS_INFO("Avg Optimization Hz: %f Hz", 1.0 / (plant->getAvgOptimizationTime() * 1e-3));
 
     cmd = controller->getControlSeq().col(0); // 从[-.5, .5] 转换到 [-1, 1]
-    step++;
 
     std_msgs::Float32 left_msg, right_msg;
-    left_msg.data = cmd[0] * 2;
-    right_msg.data = cmd[1] * 2;
+    left_msg.data = static_cast<float>(cmd[0] * 2);
+    right_msg.data = static_cast<float>(cmd[1] * 2);
     pub_left.publish(left_msg);
     pub_right.publish(right_msg);
 }
@@ -156,19 +149,37 @@ int main(int argc, char *argv[])
     ros::NodeHandle nh;
 
     // Load parameters
-    nh.param<int>("num_rollouts", num_rollouts, 4096);
+    static std::vector<float> x_weight = {10, 10, 10, 10, 10, 10};
+    nh.param<int>("horizon", controller_params.num_timesteps_, 100); // 预测域
+    nh.param<float>("dt", controller_params.dt_, 0.1);               // 步长
+    nh.param<float>("lambda", controller_params.lambda_, 1.0);       // 温度参数
+    nh.param<float>("alpha", controller_params.alpha_, 0.0);         // 探索参数
+    nh.param<int>("max_iter", controller_params.num_iters_, 1);      // 最大迭代次数
     nh.param<int>("dyn_block_size", DYN_BLOCK_X, 32);
-    nh.param<int>("horizon", horizon, 100);
-    nh.param<float>("dt", dt, 0.1);
-    nh.getParam("x_weight", x_weight);
-    nh.param<float>("lambda", _lambda, 1.0);
-    nh.param<float>("alpha", _alpha, 0.0);
-    nh.param<int>("max_iter", max_iter, 1);
-    nh.param<float>("stddev", stddev, 1.0);
-    nh.param<float>("exponents", exponents, 1.0);
+    controller_params.dynamics_rollout_dim_ = dim3(DYN_BLOCK_X, DYN_BLOCK_Y, 1);    // 动力学仿真块大小
+    controller_params.cost_rollout_dim_ = dim3(controller_params.num_iters_, 1, 1); // 代价函数仿真块大小
+
     // 读取心跳超时参数
-    nh.param<float>("heartbeat_duration", heartbeat_duration, 0.5f);
+    nh.param<float>("heartbeat_duration", heartbeat_duration, 0.5);
     hbeat_target_time = ros::Time::now().toSec() + heartbeat_duration;
+
+    // 读取并设置状态权重参数
+    nh.getParam("x_weight", x_weight);
+    memcpy(cost_params.s_coeffs, x_weight.data(), DYN_T::STATE_DIM * sizeof(float));
+    cost.setParams(cost_params); // 设置状态权重
+
+    // 读取并设置采样器参数
+    static float stddev_;
+    nh.param<float>("stddev", stddev_, 0.5); // 噪声标准差
+    std::fill(sampler_params.std_dev, sampler_params.std_dev + DYN_T::CONTROL_DIM, stddev_);
+    static float exponents_;
+    nh.param<float>("exponents", exponents_, 1.0); // 有色噪声相关系数
+    std::fill(sampler_params.exponents, sampler_params.exponents + DYN_T::CONTROL_DIM, exponents_);
+    sampler.setParams(sampler_params); // 设置采样器参数
+
+    fb_controller = std::make_shared<FB_T>(&dynamics, controller_params.dt_);                                        // 反馈控制器实例化
+    controller = std::make_shared<CONTROLLER_T>(&dynamics, &cost, fb_controller.get(), &sampler, controller_params); // MPPI控制器实例化
+    plant = std::make_shared<PLANT_T>(controller, 1 / controller_params.dt_, 1);                                     // PLANT实例化
 
     // 读取话题名称
     std::string obs_topic, tgt_topic, left_thrust_topic, right_thrust_topic;
@@ -177,50 +188,20 @@ int main(int argc, char *argv[])
     nh.param<std::string>("topics/left_thrust", left_thrust_topic, "/wamv/thrusters/left_thrust_cmd");
     nh.param<std::string>("topics/right_thrust", right_thrust_topic, "/wamv/thrusters/right_thrust_cmd");
 
-    // Init dynamics, cost, controller
-    DYN_T dynamics;
-    COST_T cost;
-    auto cost_params = cost.getParams();
-    for (uint8_t i = 0; i < DYN_T::STATE_DIM; i++)
-        cost_params.s_coeffs[i] = x_weight[i];
-    cost.setParams(cost_params);
-    FB_T fb_controller(&dynamics, dt);
-    SAMPLING_T sampler;
-    auto sampler_params = sampler.getParams();
-    for (int i = 0; i < DYN_T::CONTROL_DIM; i++)
-    {
-        sampler_params.std_dev[i] = stddev;
-        sampler_params.exponents[i] = exponents;
-    }
-    sampler.setParams(sampler_params);
-    CONTROLLER_PARAMS_T controller_params;
-    controller_params.dt_ = dt;
-    controller_params.lambda_ = _lambda;
-    controller_params.alpha_ = _alpha;
-    controller_params.dynamics_rollout_dim_ = dim3(DYN_BLOCK_X, DYN_BLOCK_Y, 1);
-    controller_params.cost_rollout_dim_ = dim3(horizon, 1, 1);
-    controller_params.num_iters_ = max_iter;
-    controller_params.num_timesteps_ = horizon;
-    auto controller = make_shared<CONTROLLER_T>(&dynamics, &cost, &fb_controller, &sampler, controller_params);
-
-    // Create MPC plant
-    PLANT_T plant(controller, 1.0 / dt, 1);
-    ROS_INFO("MPPI控制器初始化完成!");
-    ROS_INFO("预测域: %d, 步长: %.2f, 控制标准差: %.2f", horizon, dt, stddev);
+    ROS_INFO_STREAM("MPPI控制器初始化完成!");
+    ROS_INFO_STREAM("预测域: " << controller_params.num_timesteps_ << ", 步长: " << std::fixed << std::setprecision(1) << controller_params.dt_ << ", 控制标准差: " << stddev_);
 
     // 设置订阅和发布
-    ros::Subscriber sub_obs = nh.subscribe(obs_topic, 1, observer_cb);
-    ros::Subscriber sub_tgt = nh.subscribe(tgt_topic, 1, target_cb);
-    pub_left = nh.advertise<std_msgs::Float32>(left_thrust_topic, 1);
-    pub_right = nh.advertise<std_msgs::Float32>(right_thrust_topic, 1);
+    ros::Subscriber sub_obs = nh.subscribe(obs_topic, 10, observer_cb);
+    ros::Subscriber sub_tgt = nh.subscribe(tgt_topic, 10, target_cb);
+    pub_left = nh.advertise<std_msgs::Float32>(left_thrust_topic, 10);
+    pub_right = nh.advertise<std_msgs::Float32>(right_thrust_topic, 10);
 
     // Timer for MPC at rate dt
-    ros::Timer mpc_timer = nh.createTimer(ros::Duration(dt), boost::bind(&mpc_timer_cb, _1,
-                                                                         controller, &plant, cost_params));
+    ros::Timer mpc_timer = nh.createTimer(ros::Duration(controller_params.dt_), &mpc_timer_cb);
 
     // Spin to process callbacks
     ros::spin();
-
     ROS_INFO("程序终止");
     return 0;
 }

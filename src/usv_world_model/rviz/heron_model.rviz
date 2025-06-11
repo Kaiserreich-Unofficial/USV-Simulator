@@ -41,7 +41,7 @@ Visualization Manager:
   Class: ""
   Displays:
     - Alpha: 0.5
-      Cell Size: 1
+      Cell Size: 10
       Class: rviz/Grid
       Color: 160; 160; 164
       Enabled: true
@@ -55,7 +55,7 @@ Visualization Manager:
         Y: 0
         Z: 0
       Plane: XY
-      Plane Cell Count: 100
+      Plane Cell Count: 10
       Reference Frame: <Fixed Frame>
       Value: true
     - Angle Tolerance: 0.10000000149011612
@@ -181,9 +181,9 @@ Visualization Manager:
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Pitch: 1.5153974294662476
+      Pitch: 1.5303974151611328
       Target Frame: <Fixed Frame>
-      Yaw: 0.025397680699825287
+      Yaw: 0.005397682078182697
     Saved: ~
 Window Geometry:
   Displays:
@@ -201,5 +201,5 @@ Window Geometry:
   Views:
     collapsed: false
   Width: 1200
-  X: -32
-  Y: -32
+  X: -3
+  Y: 45

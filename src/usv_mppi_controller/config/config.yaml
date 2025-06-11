@@ -13,5 +13,16 @@ topics:
   target: /wamv/target_position
   left_thrust: /wamv/thrusters/left_thrust_cmd
   right_thrust: /wamv/thrusters/right_thrust_cmd
-
+simulation:
+  time_total: 500.0 # 单位：秒
+  traj_type: circle # 轨迹类型
+  radius: 10.0 # 圆形轨迹半径
+  omega: 0.1 # 圆形轨迹角速度
+  amplitude_x: 3.4 # 轨迹x方向振幅
+  amplitude_y: 4.8 # 轨迹y方向振幅
+  angular_x: 0.5 # 轨迹x方向角速度
+  angular_y: 0.25 # 轨迹y方向角速度
+  x_goal: 10.0 # 目标x坐标
+  y_goal: 10.0 # 目标y坐标
+  psi_goal: 0.0 # 目标航向角
 

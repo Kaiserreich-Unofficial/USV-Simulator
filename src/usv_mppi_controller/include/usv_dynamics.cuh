@@ -6,22 +6,6 @@
 
 namespace wamv
 {
-    // 定义状态变量的微分方程
-    __host__ __device__ inline float u_dot(const float &u, const float &v, const float &r, const float &Tl, const float &Tr)
-    {
-        return -.1586 * u - .0939 * u * fabsf(u) + .5859 * v * r + .7949 * Tl + .8332 * Tr + .1714 * r * r;
-    }
-
-    __host__ __device__ inline float v_dot(const float &u, const float &v, const float &r, const float &Tl, const float &Tr)
-    {
-        return -.0851 * v + .0145 * r - .0085 * v * fabsf(v) - .1418 * r * fabsf(r) - .0078 * u * v - 1.0014 * u * r - .0911 * Tl + .0926 * Tr - .0138 * fabsf(v) * r - .0694 * fabsf(r) * v;
-    }
-
-    __host__ __device__ inline float r_dot(const float &u, const float &v, const float &r, const float &Tl, const float &Tr)
-    {
-        return .1787 * v + .0770 * r - .0320 * v * fabsf(v) - .6022 * r * fabsf(r) - .0262 * u * v - .0081 * u * r - .3729 * Tl + .3778 * Tr - .0654 * fabsf(v) * r - .2661 * fabsf(r) * v;
-    }
-
     struct USVDynamicsParams : public DynamicsParams
     {
         enum class StateIndex : int
