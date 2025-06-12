@@ -25,6 +25,9 @@
 #include <usv_dynamics.cuh>
 #include <usv_mpc_plant.cuh>
 
+// 检测到ctrl + c信号，退出程序
+#include <signal.h>
+
 using namespace std;
 
 using DYN_T = wamv::USVDynamics;
@@ -69,9 +72,11 @@ void observer_cb(const nav_msgs::Odometry &state)
     observed_state[0] = state.pose.pose.position.x;
     observed_state[1] = state.pose.pose.position.y;
     observed_state[2] = tf::getYaw(state.pose.pose.orientation);
-    observed_state[3] = state.twist.twist.linear.x;
-    observed_state[4] = state.twist.twist.linear.y;
-    observed_state[5] = state.twist.twist.angular.z;
+    observed_state[3] = cosf(observed_state[2]);
+    observed_state[4] = sinf(observed_state[2]);
+    observed_state[5] = state.twist.twist.linear.x;
+    observed_state[6] = state.twist.twist.linear.y;
+    observed_state[7] = state.twist.twist.angular.z;
 }
 
 // Target callback
@@ -80,15 +85,23 @@ void target_cb(const nav_msgs::Odometry &state)
     target_state[0] = state.pose.pose.position.x;
     target_state[1] = state.pose.pose.position.y;
     target_state[2] = tf::getYaw(state.pose.pose.orientation);
-    target_state[3] = state.twist.twist.linear.x;
-    target_state[4] = state.twist.twist.linear.y;
-    target_state[5] = state.twist.twist.angular.z;
+    target_state[3] = cosf(target_state[2]);
+    target_state[4] = sinf(target_state[2]);
+    target_state[5] = state.twist.twist.linear.x;
+    target_state[6] = state.twist.twist.linear.y;
+    target_state[7] = state.twist.twist.angular.z;
     if (!continuous_hb_received_)
     {
         ROS_INFO("心跳信号恢复，重新启动控制器...");
         continuous_hb_received_ = true;
     }
     hbeat_received_ = true;
+}
+
+void mySigintHandler(int sig)
+{
+    ROS_WARN("程序终止...");
+    ros::shutdown(); // 通知 ROS 安全终止
 }
 
 // Timer callback: main MPC loop
@@ -149,7 +162,7 @@ int main(int argc, char *argv[])
     ros::NodeHandle nh;
 
     // Load parameters
-    static std::vector<float> x_weight = {10, 10, 10, 10, 10, 10};
+    static std::vector<float> x_weight = {10, 10, 0, 10, 10, 10, 10, 10};
     nh.param<int>("horizon", controller_params.num_timesteps_, 100); // 预测域
     nh.param<float>("dt", controller_params.dt_, 0.1);               // 步长
     nh.param<float>("lambda", controller_params.lambda_, 1.0);       // 温度参数
@@ -199,9 +212,9 @@ int main(int argc, char *argv[])
 
     // Timer for MPC at rate dt
     ros::Timer mpc_timer = nh.createTimer(ros::Duration(controller_params.dt_), &mpc_timer_cb);
+    signal(SIGINT, mySigintHandler);  // 注册自定义SIGINT处理器
 
     // Spin to process callbacks
     ros::spin();
-    ROS_INFO("程序终止");
     return 0;
 }

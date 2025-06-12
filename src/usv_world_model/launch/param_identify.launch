@@ -48,7 +48,7 @@
 
   <!-- Load robot model -->
   <!-- Determine which model -->
-  <arg name="urdf" default="$(find usv_world_model)/urdf/wamv.urdf"/>
+  <arg name="urdf" default="$(find wamv_gazebo)/urdf/wamv_gazebo.urdf.xacro"/>
 
   <param name="$(arg namespace)/robot_description"
          command="$(find xacro)/xacro &#x002D;&#x002D;inorder '$(arg urdf)'

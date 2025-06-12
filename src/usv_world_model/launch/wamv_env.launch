@@ -48,7 +48,7 @@
 
   <!-- Load robot model -->
   <!-- Determine which model -->
-  <arg name="urdf" default="$(find usv_world_model)/urdf/wamv.urdf"/>
+  <arg name="urdf" default="$(find wamv_gazebo)/urdf/wamv_gazebo.urdf.xacro"/>
 
   <param name="$(arg namespace)/robot_description"
          command="$(find xacro)/xacro &#x002D;&#x002D;inorder '$(arg urdf)'
@@ -65,6 +65,6 @@
               -urdf -param $(arg namespace)/robot_description -model wamv"/>
 
   <!-- 启动 RViz -->
-  <node pkg="rviz" type="rviz" name="rviz" args="-d $(find usv_world_model)/rviz/heron_model.rviz"/>
+  <node pkg="rviz" type="rviz" name="rviz" args="-d $(find usv_world_model)/rviz/visualize.rviz"/>
 
 </launch>

@@ -13,10 +13,12 @@ namespace wamv
             POS_X = 0,
             POS_Y,
             POS_PSI,
+            POS_CPSI,
+            POS_SPSI,
             VEL_U,
             VEL_V,
             VEL_R,
-            NUM_STATES = 6
+            NUM_STATES = 8
         };
         enum class ControlIndex : int
         {
@@ -29,10 +31,12 @@ namespace wamv
             POS_X = 0,
             POS_Y,
             POS_PSI,
+            POS_CPSI,
+            POS_SPSI,
             VEL_U,
             VEL_V,
             VEL_R,
-            NUM_OUTPUTS = 6
+            NUM_OUTPUTS = 8
         };
         USVDynamicsParams() = default;
         ~USVDynamicsParams() = default;

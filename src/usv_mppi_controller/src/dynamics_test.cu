@@ -39,6 +39,8 @@ void observer_cb(const nav_msgs::Odometry &state)
     observed_state[0] = state.pose.pose.position.x;
     observed_state[1] = state.pose.pose.position.y;
     observed_state[2] = tf::getYaw(state.pose.pose.orientation);
+    observed_state[3] = cosf(observed_state[2]);
+    observed_state[4] = sinf(observed_state[2]);
     observed_state[3] = state.twist.twist.linear.x;
     observed_state[4] = state.twist.twist.linear.y;
     observed_state[5] = state.twist.twist.angular.z;
@@ -67,9 +69,9 @@ void dyn_timer_cb(const ros::TimerEvent &event,
     tgt_msgs.pose.pose.position.x = x_next[0];
     tgt_msgs.pose.pose.position.y = x_next[1];
     tgt_msgs.pose.pose.orientation = tf::createQuaternionMsgFromYaw(x_next[2]);
-    tgt_msgs.twist.twist.linear.x = x_next[3];
-    tgt_msgs.twist.twist.linear.y = x_next[4];
-    tgt_msgs.twist.twist.angular.z = x_next[5];
+    tgt_msgs.twist.twist.linear.x = x_next[5];
+    tgt_msgs.twist.twist.linear.y = x_next[6];
+    tgt_msgs.twist.twist.angular.z = x_next[7];
     pub_target.publish(tgt_msgs);
 
     tgt_state = x_next;
