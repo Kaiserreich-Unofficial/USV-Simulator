@@ -54,9 +54,6 @@ namespace wamv
         void computeDynamics(const Eigen::Ref<const state_array> &state, const Eigen::Ref<const control_array> &control,
                              Eigen::Ref<state_array> state_der);
 
-        // bool computeGrad(const Eigen::Ref<const state_array> &state, const Eigen::Ref<const control_array> &control,
-        //                  Eigen::Ref<dfdx> A, Eigen::Ref<dfdu> B);
-
         void printState(float *state);
         void printState(const float *state);
 

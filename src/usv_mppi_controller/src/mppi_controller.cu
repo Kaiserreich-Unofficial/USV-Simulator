@@ -18,7 +18,8 @@
 #include <mppi/controllers/MPPI/mppi_controller.cuh>
 #include <mppi/controllers/Tube-MPPI/tube_mppi_controller.cuh>
 #include <mppi/cost_functions/quadratic_cost/quadratic_cost.cuh>
-#include <mppi/sampling_distributions/colored_noise/colored_noise.cuh>
+// For Log Normal sampling distribution
+#include <mppi/sampling_distributions/nln/nln.cuh>
 #include <mppi/feedback_controllers/DDP/ddp.cuh>
 
 // USV model
@@ -28,14 +29,17 @@
 // 检测到ctrl + c信号，退出程序
 #include <signal.h>
 
+// 类型萃取
+#include <type_traits>
+
 using namespace std;
 
 using DYN_T = wamv::USVDynamics;
 using COST_T = QuadraticCost<DYN_T>;
 using COST_PARAM_T = QuadraticCostTrajectoryParams<DYN_T>;
 using FB_T = DDPFeedback<DYN_T, 100>;
-using SAMPLING_T = mppi::sampling_distributions::ColoredNoiseDistribution<DYN_T::DYN_PARAMS_T>;
-using CONTROLLER_T = VanillaMPPIController<DYN_T, COST_T, FB_T, 100, 4096, SAMPLING_T>;
+using SAMPLER_T = mppi::sampling_distributions::NLNDistribution<DYN_T::DYN_PARAMS_T>;
+using CONTROLLER_T = VanillaMPPIController<DYN_T, COST_T, FB_T, 100, 4096, SAMPLER_T>;
 using CONTROLLER_PARAMS_T = CONTROLLER_T::TEMPLATED_PARAMS;
 using PLANT_T = wamv::USVMPCPlant<CONTROLLER_T>;
 using state_array = DYN_T::state_array;
@@ -49,8 +53,8 @@ state_array target_state = state_array::Zero(); // 观测状态量和目标状�
 DYN_T dynamics;
 COST_T cost;
 COST_PARAM_T cost_params = cost.getParams();
-SAMPLING_T sampler;
-auto sampler_params = sampler.getParams();
+std::shared_ptr<SAMPLER_T> sampler;
+auto sampler_params = SAMPLER_T::SAMPLING_PARAMS_T();
 CONTROLLER_PARAMS_T controller_params;
 std::shared_ptr<CONTROLLER_T> controller; // mpc controller
 std::shared_ptr<FB_T> fb_controller;      // feedback controller
@@ -133,6 +137,11 @@ void mpc_timer_cb(const ros::TimerEvent &event)
 
     static atomic<bool> alive(true); // 信号量，用于控制控制器的运行
     control_array cmd;
+
+    // 为了防止yaw角突变，首先计算一下航向角误差
+    float yaw_error = target_state(2) - observed_state(2);
+    // 将yaw_error直接累积到观测状态上，并将其作为目标状态的一部分
+    target_state(2) = observed_state(2) + yaw_error > M_PI ? yaw_error - 2 * M_PI : (yaw_error < -M_PI ? yaw_error + 2 * M_PI : yaw_error);
     memcpy(cost_params.s_goal, target_state.data(), DYN_T::STATE_DIM * sizeof(float));
     plant->setCostParams(cost_params);
     plant->updateState(observed_state, ros::Time::now().toSec());
@@ -142,11 +151,12 @@ void mpc_timer_cb(const ros::TimerEvent &event)
     // ROS_INFO("Avg Loop time: %f ms", plant->getAvgLoopTime());
     // ROS_INFO("Avg Optimization Hz: %f Hz", 1.0 / (plant->getAvgOptimizationTime() * 1e-3));
 
-    cmd = controller->getControlSeq().col(0); // 从[-.5, .5] 转换到 [-1, 1]
+    cmd = controller->getControlSeq().col(0);
 
     std_msgs::Float32 left_msg, right_msg;
-    left_msg.data = static_cast<float>(cmd[0] * 2);
-    right_msg.data = static_cast<float>(cmd[1] * 2);
+    // 需要把推力从[-100, 250]映射到[-1, 1]
+    left_msg.data = static_cast<float>(cmd[0] > 0 ? cmd[0] / 250 : cmd[0] / 100);
+    right_msg.data = static_cast<float>(cmd[1] > 0 ? cmd[1] / 250 : cmd[1] / 100);
     pub_left.publish(left_msg);
     pub_right.publish(right_msg);
 }
@@ -181,6 +191,11 @@ void autoweight_mpc_timer_cb(const ros::TimerEvent &event_)
         hbeat_target_time = now + heartbeat_duration;
     }
 
+    // 为了防止yaw角突变，首先计算一下航向角误差
+    float yaw_error = target_state(2) - observed_state(2);
+    // 将yaw_error直接累积到观测状态上，并将其作为目标状态的一部分
+    target_state(2) = observed_state(2) + yaw_error > M_PI ? yaw_error - 2 * M_PI : (yaw_error < -M_PI ? yaw_error + 2 * M_PI : yaw_error);
+
     CONTROLLER_T::state_trajectory traj = plant->getStateTraj();                       // 上一步计算的预测轨迹
     memcpy(cost_params.s_goal, target_state.data(), DYN_T::STATE_DIM * sizeof(float)); // 更新目标状态
     // 将目标状态扩展为与 traj 同样的列数
@@ -194,8 +209,7 @@ void autoweight_mpc_timer_cb(const ros::TimerEvent &event_)
     // weight的每个维度加上 0.1 * cost_weight
     weight_vec += 0.1 * cost_weight;
     // 限制权重大小
-    weight_vec = weight_vec.cwiseMax(0.1f).cwiseMin(0.5f);
-    weight_vec = weight_vec.array().log() + 1; // 归一化
+    weight_vec = weight_vec.cwiseMax(0.1f).cwiseMin(0.5f) / weight_vec.sum();
 
     ROS_INFO_STREAM("新的状态权重: " << weight_vec.transpose().format(Eigen::IOFormat(1, 0, ", ", "\n", "[", "]")));
     // memcpy(cost_params.s_coeffs, weight_vec.data(), DYN_T::STATE_DIM * sizeof(float)); // 冗余的
@@ -246,16 +260,17 @@ int main(int argc, char *argv[])
 
     // 读取并设置采样器参数
     static float stddev_;
-    nh.param<float>("stddev", stddev_, .5); // 噪声标准差
+    nh.param<float>("stddev", stddev_, 200); // 噪声标准差
     std::fill(sampler_params.std_dev, sampler_params.std_dev + DYN_T::CONTROL_DIM, stddev_);
-    static float exponents_;
-    nh.param<float>("exponents", exponents_, .5); // 有色噪声相关系数
-    std::fill(sampler_params.exponents, sampler_params.exponents + DYN_T::CONTROL_DIM, exponents_);
-    sampler.setParams(sampler_params); // 设置采样器参数
+    // ROS_WARN("有色噪声已启用!");
+    // static float exponents_;
+    // nh.param<float>("exponents", exponents_, .5); // 有色噪声相关系数
+    // std::fill(sampler_params.exponents, sampler_params.exponents + DYN_T::CONTROL_DIM, exponents_);
+    sampler = make_shared<SAMPLER_T>(sampler_params); // 采样器实例化
 
-    fb_controller = std::make_shared<FB_T>(&dynamics, controller_params.dt_);                                        // 反馈控制器实例化
-    controller = std::make_shared<CONTROLLER_T>(&dynamics, &cost, fb_controller.get(), &sampler, controller_params); // MPPI控制器实例化
-    plant = std::make_shared<PLANT_T>(controller, 1 / controller_params.dt_, 1);                                     // PLANT实例化
+    fb_controller = std::make_shared<FB_T>(&dynamics, controller_params.dt_);                                       // 反馈控制器实例化
+    controller = std::make_shared<CONTROLLER_T>(&dynamics, &cost, fb_controller.get(), sampler.get(), controller_params); // MPPI控制器实例化
+    plant = std::make_shared<PLANT_T>(controller, 1 / controller_params.dt_, 1);                                    // PLANT实例化
 
     // 读取话题名称
     std::string obs_topic, tgt_topic, left_thrust_topic, right_thrust_topic;
@@ -274,7 +289,7 @@ int main(int argc, char *argv[])
     pub_right = nh.advertise<std_msgs::Float32>(right_thrust_topic, 10);
 
     // Timer for MPC at rate dt
-    ros::Timer mpc_timer = nh.createTimer(ros::Duration(controller_params.dt_), &autoweight_mpc_timer_cb);
+    ros::Timer mpc_timer = nh.createTimer(ros::Duration(controller_params.dt_), &mpc_timer_cb);
     signal(SIGINT, mySigintHandler); // 注册自定义SIGINT处理器
 
     // Spin to process callbacks

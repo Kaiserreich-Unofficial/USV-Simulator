@@ -75,8 +75,9 @@ void dyn_timer_cb(const ros::TimerEvent &event)
     ROS_INFO_STREAM("Publish Thrust Command:" << fixed << setprecision(2) << u_left << " " << u_right);
     // ROS_INFO_STREAM("Target State: " << fixed << setprecision(2) << tgt_state.transpose());
     std_msgs::Float32 left_msg, right_msg;
-    left_msg.data = u_left * 2;
-    right_msg.data = u_right * 2;
+    // 映射推力从[-100, 250]到[-1, 1]
+    left_msg.data = u_left > 0 ? u_left / 250 : u_left / 100;
+    right_msg.data = u_right > 0 ? u_right / 250 : u_right / 100;
     pub_left.publish(left_msg);
     pub_right.publish(right_msg);
 }
@@ -95,8 +96,8 @@ int main(int argc, char *argv[])
 
     // Load parameters
     nh.param<float>("dt", dt, 0.1);
-    nh.param<float>("dynamics_test/left_input", u_left, 0.1);
-    nh.param<float>("dynamics_test/right_input", u_right, 0.1);
+    nh.param<float>("dynamics_test/left_input", u_left, 50);
+    nh.param<float>("dynamics_test/right_input", u_right, 50);
 
     // 读取话题名称
     std::string obs_topic, tgt_topic, left_thrust_topic, right_thrust_topic;

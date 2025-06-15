@@ -5,17 +5,17 @@ namespace wamv
 {
     __host__ __device__ inline float u_dot(const float &u, const float &v, const float &r, const float &Tl, const float &Tr)
     {
-        return -.1586 * u - .0939 * u * fabsf(u) + .5859 * v * r + .7949 * Tl + .8332 * Tr + .1714 * r * r;
+        return Tl / 180 + Tr / 180 + r * v - (u * ((362 * fabsf(u)) / 5 + 513 / 10)) / 180;
     }
 
     __host__ __device__ inline float v_dot(const float &u, const float &v, const float &r, const float &Tl, const float &Tr)
     {
-        return -.0851 * v + .0145 * r - .0085 * v * fabsf(v) - .1418 * r * fabsf(r) - .0078 * u * v - 1.0014 * u * r - .0911 * Tl + .0926 * Tr - .0138 * fabsf(v) * r - .0694 * fabsf(r) * v;
+        return -(2 * v) / 9 - r * u;
     }
 
     __host__ __device__ inline float r_dot(const float &u, const float &v, const float &r, const float &Tl, const float &Tr)
     {
-        return .1787 * v + .0770 * r - .0320 * v * fabsf(v) - .6022 * r * fabsf(r) - .0262 * u * v - .0081 * u * r - .3729 * Tl + .3778 * Tr - .0654 * fabsf(v) * r - .2661 * fabsf(r) * v;
+        return (201 * Tr) / 89200 - (201 * Tl) / 89200 - (200 * r) / 223;
     }
 
     // 构造函数
@@ -31,14 +31,15 @@ namespace wamv
                                       Eigen::Ref<state_array> state_der)
     {
         // Extract state variables
-        float psi = state(2); // Heading Angle
-        float u = state(3);   // Surge Velocity
-        float v = state(4);   // Sway Velocity
-        float r = state(5);   // Yaw Rate
+        const float psi = state(2); // Heading Angle
+        const float u = state(3);   // Surge Velocity
+        const float v = state(4);   // Sway Velocity
+        const float r = state(5);   // Yaw Rate
 
         // Extract control inputs
-        float S_left = control(0);  // Left Thruster Input
-        float S_right = control(1); // Right Thruster Input
+        const float S_left = control(0);  // Left Thruster Input
+        const float S_right = control(1); // Right Thruster Input
+
         // Compute the dynamics
         state_der(0) = cosf(psi) * u - sinf(psi) * v;
         state_der(1) = sinf(psi) * u + cosf(psi) * v;
@@ -53,14 +54,14 @@ namespace wamv
                                                  float *theta_s)
     {
         // Extract state variables
-        float psi = state[2]; // Heading Angle
-        float u = state[3];   // Surge Velocity
-        float v = state[4];   // Sway Velocity
-        float r = state[5];   // Yaw Rate
+        const float psi = state[2]; // Heading Angle
+        const float u = state[3];   // Surge Velocity
+        const float v = state[4];   // Sway Velocity
+        const float r = state[5];   // Yaw Rate
 
         // Extract control inputs
-        float S_left = control[0];  // Left Thruster Input
-        float S_right = control[1]; // Right Thruster Input
+        const float S_left = control[0];  // Left Thruster Input
+        const float S_right = control[1]; // Right Thruster Input
 
         // Compute the dynamics
         state_der[0] = __cosf(psi) * u - __sinf(psi) * v;
@@ -100,7 +101,7 @@ namespace wamv
     {
         // 声明 state 未使用
         (void)state;
-        control = control.cwiseMin(.5).cwiseMax(-.5); // 限制控制量在 -.5 到 .5 之间
+        control = control.cwiseMin(250).cwiseMax(-100); // 限制控制量在 -100 到 250 之间
     }
 
     // 施加控制约束（CUDAs）
@@ -112,7 +113,7 @@ namespace wamv
         // parallelize setting the constraints with y dim
         for (i = p_index; i < CONTROL_DIM; i += step)
         {
-            control[i] = fminf(fmaxf(-.5, control[i]), .5); // 限制控制量在 -.5 到 .5 之间 (CUDA)
+            control[i] = fminf(fmaxf(-100, control[i]), 250); // 限制控制量在 -100 到 250 之间 (CUDA)
         }
     }
 }

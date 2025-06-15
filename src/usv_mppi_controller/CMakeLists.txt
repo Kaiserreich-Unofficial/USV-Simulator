@@ -23,11 +23,14 @@ add_subdirectory(${MPPIGeneric_DIR} ${CMAKE_CURRENT_BINARY_DIR}/MPPI-Generic)
 find_package(MPPIGenericTools CONFIG REQUIRED)
 find_package(Eigen3 REQUIRED)
 
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
 set(CMAKE_CUDA_STANDARD 14)
 set(CMAKE_CUDA_STANDARD_REQUIRED ON)
 
 # Enable advanced optimizations
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++14 -O3 -flto")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3 -flto")
 set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -O3 -diag-suppress=20011,20012,20013,20014,20015")
 
 ## System dependencies are found with CMake's conventions
@@ -147,6 +150,7 @@ include
 
 add_executable(mppi_controller src/mppi_controller.cu)
 add_executable(dynamics_test src/dynamics_test.cu)
+
 # add_dependencies(head_src ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 add_dependencies(mppi_controller ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 add_dependencies(dynamics_test ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
