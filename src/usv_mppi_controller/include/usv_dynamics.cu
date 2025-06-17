@@ -101,19 +101,20 @@ namespace wamv
     {
         // 声明 state 未使用
         (void)state;
-        control = control.cwiseMin(250).cwiseMax(-100); // 限制控制量在 -100 到 250 之间
+        control(0) = min(max(control(0), -0.5f), 3.0f); // 对u施加约束[-0.5, 3.0]
+        control(1) = min(max(control(1), -0.5f), 3.0f); // 对v施加约束[-0.5, 3.0]
+        control(2) = min(max(control(2), -M_PI), M_PI); // 对r施加约束[-π/2, π/2]
     }
 
     // 施加控制约束（CUDAs）
     __device__ void USVDynamics::enforceConstraints(float *state, float *control)
     {
         // TODO should control_rngs_ be a constant memory parameter
-        int i, p_index, step;
-        mppi::p1::getParallel1DIndex<mppi::p1::Parallel1Dir::THREAD_Y>(p_index, step);
+        // int i, p_index, step;
+        // mppi::p1::getParallel1DIndex<mppi::p1::Parallel1Dir::THREAD_Y>(p_index, step);
         // parallelize setting the constraints with y dim
-        for (i = p_index; i < CONTROL_DIM; i += step)
-        {
-            control[i] = fminf(fmaxf(-100, control[i]), 250); // 限制控制量在 -100 到 250 之间 (CUDA)
-        }
+        control[0] = min(max(control[0], -0.5f), 3.0f); // 对u施加约束[-0.5, 3.0]
+        control[1] = min(max(control[1], -0.5f), 3.0f); // 对v施加约束[-0.5, 3.0]
+        control[2] = min(max(control[2], -M_PI), M_PI); // 对r施加约束[-π/2, π/2]
     }
 }

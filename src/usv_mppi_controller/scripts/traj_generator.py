@@ -73,13 +73,13 @@ class TrajectoryGenerator:
         t = np.linspace(0, (total_steps - 1) * dt, total_steps)
 
         # 位置
-        x = radius * np.cos(omega * t)
-        y = radius * np.sin(omega * t)
+        x = radius * np.sin(omega * t)
+        y = radius * np.cos(omega * t) - radius
         psi = omega * t
 
         # 一阶导数（速度）
-        x_dot = -radius * omega * np.sin(omega * t)
-        y_dot = radius * omega * np.cos(omega * t)
+        x_dot = radius * omega * np.cos(omega * t)
+        y_dot = -radius * omega * np.sin(omega * t)
 
         # 艏向角
         psi = np.arctan2(y_dot, x_dot)

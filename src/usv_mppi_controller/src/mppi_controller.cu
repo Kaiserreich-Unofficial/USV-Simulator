@@ -22,15 +22,15 @@
 #include <mppi/sampling_distributions/nln/nln.cuh>
 #include <mppi/feedback_controllers/DDP/ddp.cuh>
 
+// ILQR Solver
+#include "ilqr.h"
+
 // USV model
 #include <usv_dynamics.cuh>
 #include <usv_mpc_plant.cuh>
 
 // 检测到ctrl + c信号，退出程序
 #include <signal.h>
-
-// 类型萃取
-#include <type_traits>
 
 using namespace std;
 
@@ -39,7 +39,7 @@ using COST_T = QuadraticCost<DYN_T>;
 using COST_PARAM_T = QuadraticCostTrajectoryParams<DYN_T>;
 using FB_T = DDPFeedback<DYN_T, 100>;
 using SAMPLER_T = mppi::sampling_distributions::NLNDistribution<DYN_T::DYN_PARAMS_T>;
-using CONTROLLER_T = VanillaMPPIController<DYN_T, COST_T, FB_T, 100, 4096, SAMPLER_T>;
+using CONTROLLER_T = VanillaMPPIController<DYN_T, COST_T, FB_T, 100, 8192, SAMPLER_T>;
 using CONTROLLER_PARAMS_T = CONTROLLER_T::TEMPLATED_PARAMS;
 using PLANT_T = wamv::USVMPCPlant<CONTROLLER_T>;
 using state_array = DYN_T::state_array;
@@ -54,7 +54,7 @@ DYN_T dynamics;
 COST_T cost;
 COST_PARAM_T cost_params = cost.getParams();
 std::shared_ptr<SAMPLER_T> sampler;
-auto sampler_params = SAMPLER_T::SAMPLING_PARAMS_T();
+SAMPLER_T::SAMPLING_PARAMS_T sampler_params;
 CONTROLLER_PARAMS_T controller_params;
 std::shared_ptr<CONTROLLER_T> controller; // mpc controller
 std::shared_ptr<FB_T> fb_controller;      // feedback controller
@@ -105,6 +105,7 @@ void mySigintHandler(int sig)
 }
 
 // Timer callback: main MPC loop
+/*
 void mpc_timer_cb(const ros::TimerEvent &event)
 {
     // 心跳超时检测
@@ -159,78 +160,7 @@ void mpc_timer_cb(const ros::TimerEvent &event)
     right_msg.data = static_cast<float>(cmd[1] > 0 ? cmd[1] / 250 : cmd[1] / 100);
     pub_left.publish(left_msg);
     pub_right.publish(right_msg);
-}
-
-void autoweight_mpc_timer_cb(const ros::TimerEvent &event_)
-{
-    // 心跳超时检测
-    double now = ros::Time::now().toSec();
-    if (now > hbeat_target_time)
-    {
-        if (hbeat_received_)
-        {
-            // 本周期收到心跳，允许输出推进命令
-            hbeat_received_ = false;
-            // （推进器正常由后面的 pub_left/pub_right 发布）
-        }
-        else
-        {
-            // 丢失心跳，停用推进器
-            if (continuous_hb_received_)
-            {
-                ROS_WARN("心跳信号丢失 — 推进器已禁用！");
-                continuous_hb_received_ = false;
-            }
-            std_msgs::Float32 zero;
-            zero.data = 0.0f;
-            pub_left.publish(zero);
-            pub_right.publish(zero);
-            return; // 跳过下发真实命令
-        }
-        // 设定下一个心跳检测点
-        hbeat_target_time = now + heartbeat_duration;
-    }
-
-    // 为了防止yaw角突变，首先计算一下航向角误差
-    float yaw_error = target_state(2) - observed_state(2);
-    // 将yaw_error直接累积到观测状态上，并将其作为目标状态的一部分
-    target_state(2) = observed_state(2) + yaw_error > M_PI ? yaw_error - 2 * M_PI : (yaw_error < -M_PI ? yaw_error + 2 * M_PI : yaw_error);
-
-    CONTROLLER_T::state_trajectory traj = plant->getStateTraj();                       // 上一步计算的预测轨迹
-    memcpy(cost_params.s_goal, target_state.data(), DYN_T::STATE_DIM * sizeof(float)); // 更新目标状态
-    // 将目标状态扩展为与 traj 同样的列数
-    CONTROLLER_T::state_trajectory goal_traj =
-        target_state.replicate(1, traj.cols());
-
-    // 计算代价的指数权重
-    state_array cost_per_state = (traj - goal_traj).cwiseAbs().rowwise().mean(); // 计算每个状态变量的代价
-    state_array cost_weight = cost_per_state.array().log() + 1;                  // 计算代价的指数权重
-    Eigen::Map<state_array> weight_vec(cost_params.s_coeffs);                    // 每次映射一次，防止被优化器修改
-    // weight的每个维度加上 0.1 * cost_weight
-    weight_vec += 0.1 * cost_weight;
-    // 限制权重大小
-    weight_vec = weight_vec.cwiseMax(0.1f).cwiseMin(0.5f) / weight_vec.sum();
-
-    ROS_INFO_STREAM("新的状态权重: " << weight_vec.transpose().format(Eigen::IOFormat(1, 0, ", ", "\n", "[", "]")));
-    // memcpy(cost_params.s_coeffs, weight_vec.data(), DYN_T::STATE_DIM * sizeof(float)); // 冗余的
-    plant->setCostParams(cost_params);
-    plant->updateState(observed_state, ros::Time::now().toSec());
-    static std::atomic<bool> alive(true); // 优化线程的存活标志
-    control_array cmd;
-    plant->runControlIteration(&alive);
-
-    ROS_INFO_STREAM("平均优化时间: " << std::fixed << std::setprecision(1) << plant->getAvgOptimizationTime() << " ms, 上次优化时间: " << std::setprecision(1) << plant->getLastOptimizationTime() << " ms");
-    // ROS_INFO("Avg Loop time: %f ms", plant->getAvgLoopTime());
-    // ROS_INFO("Avg Optimization Hz: %f Hz", 1.0 / (plant->getAvgOptimizationTime() * 1e-3));
-
-    cmd = controller->getControlSeq().col(0); // 从[-.5, .5] 转换到 [-1, 1]
-
-    std_msgs::Float32 left_msg, right_msg;
-    left_msg.data = static_cast<float>(cmd[0] * 2);
-    right_msg.data = static_cast<float>(cmd[1] * 2);
-    pub_left.publish(left_msg);
-    pub_right.publish(right_msg);
-}
+}*/
 
 int main(int argc, char *argv[])
 {
@@ -239,7 +169,7 @@ int main(int argc, char *argv[])
     ros::NodeHandle nh;
 
     // Load parameters
-    static std::vector<float> x_weight = {10, 10, 10, 10, 10, 10};
+    static std::vector<float> x_weight = {10, 10, 10};
     nh.param<int>("horizon", controller_params.num_timesteps_, 100); // 预测域
     nh.param<float>("dt", controller_params.dt_, 0.1);               // 步长
     nh.param<float>("lambda", controller_params.lambda_, 1.0);       // 温度参数
@@ -260,7 +190,7 @@ int main(int argc, char *argv[])
 
     // 读取并设置采样器参数
     static float stddev_;
-    nh.param<float>("stddev", stddev_, 200); // 噪声标准差
+    nh.param<float>("stddev", stddev_, 2.0); // 噪声标准差
     std::fill(sampler_params.std_dev, sampler_params.std_dev + DYN_T::CONTROL_DIM, stddev_);
     // ROS_WARN("有色噪声已启用!");
     // static float exponents_;
@@ -289,7 +219,7 @@ int main(int argc, char *argv[])
     pub_right = nh.advertise<std_msgs::Float32>(right_thrust_topic, 10);
 
     // Timer for MPC at rate dt
-    ros::Timer mpc_timer = nh.createTimer(ros::Duration(controller_params.dt_), &mpc_timer_cb);
+    // ros::Timer mpc_timer = nh.createTimer(ros::Duration(controller_params.dt_), &mpc_timer_cb);
     signal(SIGINT, mySigintHandler); // 注册自定义SIGINT处理器
 
     // Spin to process callbacks

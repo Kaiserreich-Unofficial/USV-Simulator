@@ -1,4 +1,5 @@
-cmake_minimum_required(VERSION 3.0.2)
+cmake_minimum_required(VERSION 3.8)
+cmake_policy(SET CMP0079 NEW)
 project(usv_mppi_controller LANGUAGES C CXX CUDA)
 
 ## Compile as C++11, supported in ROS Kinetic and newer

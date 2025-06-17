@@ -1,9 +1,0 @@
-<launch>
-    <!-- 加载整个 YAML 文件 -->
-    <rosparam command="load" file="$(find topic_convert)/config/config.yaml" />
-
-    <!-- 启动节点 -->
-    <node name="topic_convert" pkg="topic_convert" type="topic_convert" output="screen" />
-
-    <node pkg="topic_tools" type="relay" name="relay_old_to_new" output="screen" args="/wamv/sensors/position/p3d_wamv /mavros/local_position/odom" />
-  </launch>
