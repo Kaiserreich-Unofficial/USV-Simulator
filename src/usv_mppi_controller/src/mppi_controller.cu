@@ -22,17 +22,12 @@
 #include <mppi/sampling_distributions/nln/nln.cuh>
 #include <mppi/feedback_controllers/DDP/ddp.cuh>
 
-// ILQR Solver
-#include "ilqr.h"
-
 // USV model
 #include <usv_dynamics.cuh>
 #include <usv_mpc_plant.cuh>
 
 // 检测到ctrl + c信号，退出程序
 #include <signal.h>
-
-using namespace std;
 
 using DYN_T = wamv::USVDynamics;
 using COST_T = QuadraticCost<DYN_T>;
@@ -105,7 +100,6 @@ void mySigintHandler(int sig)
 }
 
 // Timer callback: main MPC loop
-/*
 void mpc_timer_cb(const ros::TimerEvent &event)
 {
     // 心跳超时检测
@@ -136,7 +130,7 @@ void mpc_timer_cb(const ros::TimerEvent &event)
         hbeat_target_time = now + heartbeat_duration;
     }
 
-    static atomic<bool> alive(true); // 信号量，用于控制控制器的运行
+    static std::atomic<bool> alive(true); // 信号量，用于控制控制器的运行
     control_array cmd;
 
     // 为了防止yaw角突变，首先计算一下航向角误差
@@ -160,7 +154,7 @@ void mpc_timer_cb(const ros::TimerEvent &event)
     right_msg.data = static_cast<float>(cmd[1] > 0 ? cmd[1] / 250 : cmd[1] / 100);
     pub_left.publish(left_msg);
     pub_right.publish(right_msg);
-}*/
+}
 
 int main(int argc, char *argv[])
 {
@@ -169,7 +163,7 @@ int main(int argc, char *argv[])
     ros::NodeHandle nh;
 
     // Load parameters
-    static std::vector<float> x_weight = {10, 10, 10};
+    static std::vector<float> x_weight = {10, 10, 10, 10, 10, 10};
     nh.param<int>("horizon", controller_params.num_timesteps_, 100); // 预测域
     nh.param<float>("dt", controller_params.dt_, 0.1);               // 步长
     nh.param<float>("lambda", controller_params.lambda_, 1.0);       // 温度参数
@@ -190,13 +184,13 @@ int main(int argc, char *argv[])
 
     // 读取并设置采样器参数
     static float stddev_;
-    nh.param<float>("stddev", stddev_, 2.0); // 噪声标准差
+    nh.param<float>("stddev", stddev_, 150.0); // 噪声标准差
     std::fill(sampler_params.std_dev, sampler_params.std_dev + DYN_T::CONTROL_DIM, stddev_);
     // ROS_WARN("有色噪声已启用!");
     // static float exponents_;
     // nh.param<float>("exponents", exponents_, .5); // 有色噪声相关系数
     // std::fill(sampler_params.exponents, sampler_params.exponents + DYN_T::CONTROL_DIM, exponents_);
-    sampler = make_shared<SAMPLER_T>(sampler_params); // 采样器实例化
+    sampler = std::make_shared<SAMPLER_T>(sampler_params); // 采样器实例化
 
     fb_controller = std::make_shared<FB_T>(&dynamics, controller_params.dt_);                                       // 反馈控制器实例化
     controller = std::make_shared<CONTROLLER_T>(&dynamics, &cost, fb_controller.get(), sampler.get(), controller_params); // MPPI控制器实例化
@@ -219,7 +213,7 @@ int main(int argc, char *argv[])
     pub_right = nh.advertise<std_msgs::Float32>(right_thrust_topic, 10);
 
     // Timer for MPC at rate dt
-    // ros::Timer mpc_timer = nh.createTimer(ros::Duration(controller_params.dt_), &mpc_timer_cb);
+    ros::Timer mpc_timer = nh.createTimer(ros::Duration(controller_params.dt_), &mpc_timer_cb);
     signal(SIGINT, mySigintHandler); // 注册自定义SIGINT处理器
 
     // Spin to process callbacks

@@ -13,21 +13,26 @@ namespace wamv
             POS_X = 0,
             POS_Y,
             POS_PSI,
-            NUM_STATES = 3
+            VEL_U,
+            VEL_V,
+            VEL_R,
+            NUM_STATES = 6
         };
         enum class ControlIndex : int
         {
-            VEL_U = 0,
-            VEL_V,
-            VEL_R,
-            NUM_CONTROLS = 3
+            INPUT_LEFT = 0,
+            INPUT_RIGHT,
+            NUM_CONTROLS = 2
         };
         enum class OutputIndex : int
         {
             POS_X = 0,
             POS_Y,
             POS_PSI,
-            NUM_OUTPUTS = 3
+            VEL_U,
+            VEL_V,
+            VEL_R,
+            NUM_OUTPUTS = 6
         };
         USVDynamicsParams() = default;
         ~USVDynamicsParams() = default;
